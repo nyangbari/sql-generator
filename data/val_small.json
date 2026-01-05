@@ -1,0 +1,252 @@
+[
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: How many singers do we have?\n\nSQL Query:",
+    "output": "SELECT count(*) FROM singer",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the total number of singers?\n\nSQL Query:",
+    "output": "SELECT count(*) FROM singer",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show name, country, age for all singers ordered by age from the oldest to the youngest.\n\nSQL Query:",
+    "output": "SELECT name ,  country ,  age FROM singer ORDER BY age DESC",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names, countries, and ages for every singer in descending order of age?\n\nSQL Query:",
+    "output": "SELECT name ,  country ,  age FROM singer ORDER BY age DESC",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the average, minimum, and maximum age of all singers from France?\n\nSQL Query:",
+    "output": "SELECT avg(age) ,  min(age) ,  max(age) FROM singer WHERE country  =  'France'",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the average, minimum, and maximum age for all French singers?\n\nSQL Query:",
+    "output": "SELECT avg(age) ,  min(age) ,  max(age) FROM singer WHERE country  =  'France'",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show the name and the release year of the song by the youngest singer.\n\nSQL Query:",
+    "output": "SELECT song_name ,  song_release_year FROM singer ORDER BY age LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names and release years for all the songs of the youngest singer?\n\nSQL Query:",
+    "output": "SELECT song_name ,  song_release_year FROM singer ORDER BY age LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are all distinct countries where singers above age 20 are from?\n\nSQL Query:",
+    "output": "SELECT DISTINCT country FROM singer WHERE age  >  20",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are  the different countries with singers above age 20?\n\nSQL Query:",
+    "output": "SELECT DISTINCT country FROM singer WHERE age  >  20",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show all countries and the number of singers in each country.\n\nSQL Query:",
+    "output": "SELECT country ,  count(*) FROM singer GROUP BY country",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: How many singers are from each country?\n\nSQL Query:",
+    "output": "SELECT country ,  count(*) FROM singer GROUP BY country",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: List all song names by singers above the average age.\n\nSQL Query:",
+    "output": "SELECT song_name FROM singer WHERE age  >  (SELECT avg(age) FROM singer)",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are all the song names by singers who are older than average?\n\nSQL Query:",
+    "output": "SELECT song_name FROM singer WHERE age  >  (SELECT avg(age) FROM singer)",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show location and name for all stadiums with a capacity between 5000 and 10000.\n\nSQL Query:",
+    "output": "SELECT LOCATION ,  name FROM stadium WHERE capacity BETWEEN 5000 AND 10000",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the locations and names of all stations with capacity between 5000 and 10000?\n\nSQL Query:",
+    "output": "SELECT LOCATION ,  name FROM stadium WHERE capacity BETWEEN 5000 AND 10000",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the maximum capacity and the average of all stadiums ?\n\nSQL Query:",
+    "output": "select max(capacity), average from stadium",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the average and maximum capacities for all stadiums ?\n\nSQL Query:",
+    "output": "select avg(capacity) ,  max(capacity) from stadium",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the name and capacity for the stadium with highest average attendance?\n\nSQL Query:",
+    "output": "SELECT name ,  capacity FROM stadium ORDER BY average DESC LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the name and capacity for the stadium with the highest average attendance?\n\nSQL Query:",
+    "output": "SELECT name ,  capacity FROM stadium ORDER BY average DESC LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: How many concerts are there in year 2014 or 2015?\n\nSQL Query:",
+    "output": "SELECT count(*) FROM concert WHERE YEAR  =  2014 OR YEAR  =  2015",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: How many concerts occurred in 2014 or 2015?\n\nSQL Query:",
+    "output": "SELECT count(*) FROM concert WHERE YEAR  =  2014 OR YEAR  =  2015",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show the stadium name and the number of concerts in each stadium.\n\nSQL Query:",
+    "output": "SELECT T2.name ,  count(*) FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id GROUP BY T1.stadium_id",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: For each stadium, how many concerts play there?\n\nSQL Query:",
+    "output": "SELECT T2.name ,  count(*) FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id GROUP BY T1.stadium_id",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show the stadium name and capacity with most number of concerts in year 2014 or after.\n\nSQL Query:",
+    "output": "SELECT T2.name ,  T2.capacity FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.year  >=  2014 GROUP BY T2.stadium_id ORDER BY count(*) DESC LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the name and capacity of the stadium with the most concerts after 2013 ?\n\nSQL Query:",
+    "output": "select t2.name ,  t2.capacity from concert as t1 join stadium as t2 on t1.stadium_id  =  t2.stadium_id where t1.year  >  2013 group by t2.stadium_id order by count(*) desc limit 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Which year has most number of concerts?\n\nSQL Query:",
+    "output": "SELECT YEAR FROM concert GROUP BY YEAR ORDER BY count(*) DESC LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the year that had the most concerts?\n\nSQL Query:",
+    "output": "SELECT YEAR FROM concert GROUP BY YEAR ORDER BY count(*) DESC LIMIT 1",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show the stadium names without any concert.\n\nSQL Query:",
+    "output": "SELECT name FROM stadium WHERE stadium_id NOT IN (SELECT stadium_id FROM concert)",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names of the stadiums without any concerts?\n\nSQL Query:",
+    "output": "SELECT name FROM stadium WHERE stadium_id NOT IN (SELECT stadium_id FROM concert)",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show countries where a singer above age 40 and a singer below 30 are from.\n\nSQL Query:",
+    "output": "SELECT country FROM singer WHERE age  >  40 INTERSECT SELECT country FROM singer WHERE age  <  30",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show names for all stadiums except for stadiums having a concert in year 2014.\n\nSQL Query:",
+    "output": "SELECT name FROM stadium EXCEPT SELECT T2.name FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.year  =  2014",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names of all stadiums that did not have a concert in 2014?\n\nSQL Query:",
+    "output": "SELECT name FROM stadium EXCEPT SELECT T2.name FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.year  =  2014",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Show the name and theme for all concerts and the number of singers in each concert.\n\nSQL Query:",
+    "output": "SELECT T2.concert_name ,  T2.theme ,  count(*) FROM singer_in_concert AS T1 JOIN concert AS T2 ON T1.concert_id  =  T2.concert_id GROUP BY T2.concert_id",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names , themes , and number of singers for every concert ?\n\nSQL Query:",
+    "output": "select t2.concert_name ,  t2.theme ,  count(*) from singer_in_concert as t1 join concert as t2 on t1.concert_id  =  t2.concert_id group by t2.concert_id",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: List singer names and number of concerts for each singer.\n\nSQL Query:",
+    "output": "SELECT T2.name ,  count(*) FROM singer_in_concert AS T1 JOIN singer AS T2 ON T1.singer_id  =  T2.singer_id GROUP BY T2.singer_id",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names of the singers and number of concerts for each person?\n\nSQL Query:",
+    "output": "SELECT T2.name ,  count(*) FROM singer_in_concert AS T1 JOIN singer AS T2 ON T1.singer_id  =  T2.singer_id GROUP BY T2.singer_id",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: List all singer names in concerts in year 2014.\n\nSQL Query:",
+    "output": "SELECT T2.name FROM singer_in_concert AS T1 JOIN singer AS T2 ON T1.singer_id  =  T2.singer_id JOIN concert AS T3 ON T1.concert_id  =  T3.concert_id WHERE T3.year  =  2014",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names of the singers who performed in a concert in 2014?\n\nSQL Query:",
+    "output": "SELECT T2.name FROM singer_in_concert AS T1 JOIN singer AS T2 ON T1.singer_id  =  T2.singer_id JOIN concert AS T3 ON T1.concert_id  =  T3.concert_id WHERE T3.year  =  2014",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: what is the name and nation of the singer who have a song having 'Hey' in its name?\n\nSQL Query:",
+    "output": "SELECT name ,  country FROM singer WHERE song_name LIKE '%Hey%'",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What is the name and country of origin of every singer who has a song with the word 'Hey' in its title?\n\nSQL Query:",
+    "output": "SELECT name ,  country FROM singer WHERE song_name LIKE '%Hey%'",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Find the name and location of the stadiums which some concerts happened in the years of both 2014 and 2015.\n\nSQL Query:",
+    "output": "SELECT T2.name ,  T2.location FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.Year  =  2014 INTERSECT SELECT T2.name ,  T2.location FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.Year  =  2015",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the names and locations of the stadiums that had concerts that occurred in both 2014 and 2015?\n\nSQL Query:",
+    "output": "SELECT T2.name ,  T2.location FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.Year  =  2014 INTERSECT SELECT T2.name ,  T2.location FROM concert AS T1 JOIN stadium AS T2 ON T1.stadium_id  =  T2.stadium_id WHERE T1.Year  =  2015",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: Find the number of concerts happened in the stadium with the highest capacity .\n\nSQL Query:",
+    "output": "select count(*) from concert where stadium_id = (select stadium_id from stadium order by capacity desc limit 1)",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n- stadium (Stadium_ID, Location, Name, Capacity, Highest, Lowest, Average)\n- singer (Singer_ID, Name, Country, Song_Name, Song_release_year, Age, Is_male)\n- concert (concert_ID, concert_Name, Theme, Stadium_ID, Year)\n- singer_in_concert (concert_ID, Singer_ID)\n\nQuestion: What are the number of concerts that occurred in the stadium with the largest capacity ?\n\nSQL Query:",
+    "output": "select count(*) from concert where stadium_id = (select stadium_id from stadium order by capacity desc limit 1)",
+    "db_id": "concert_singer"
+  },
+  {
+    "input": "Database Schema:\nTables:\n(Schema information will be provided based on database)\n\nQuestion: Find the number of pets whose weight is heavier than 10.\n\nSQL Query:",
+    "output": "SELECT count(*) FROM pets WHERE weight  >  10",
+    "db_id": "pets_1"
+  },
+  {
+    "input": "Database Schema:\nTables:\n(Schema information will be provided based on database)\n\nQuestion: How many pets have a greater weight than 10?\n\nSQL Query:",
+    "output": "SELECT count(*) FROM pets WHERE weight  >  10",
+    "db_id": "pets_1"
+  },
+  {
+    "input": "Database Schema:\nTables:\n(Schema information will be provided based on database)\n\nQuestion: Find the weight of the youngest dog.\n\nSQL Query:",
+    "output": "SELECT weight FROM pets ORDER BY pet_age LIMIT 1",
+    "db_id": "pets_1"
+  },
+  {
+    "input": "Database Schema:\nTables:\n(Schema information will be provided based on database)\n\nQuestion: How much does the youngest dog weigh?\n\nSQL Query:",
+    "output": "SELECT weight FROM pets ORDER BY pet_age LIMIT 1",
+    "db_id": "pets_1"
+  },
+  {
+    "input": "Database Schema:\nTables:\n(Schema information will be provided based on database)\n\nQuestion: Find the maximum weight for each type of pet. List the maximum weight and pet type.\n\nSQL Query:",
+    "output": "SELECT max(weight) ,  petType FROM pets GROUP BY petType",
+    "db_id": "pets_1"
+  }
+]
