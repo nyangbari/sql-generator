@@ -65,3 +65,5 @@ langchain-core
 
 # LangChain (최신)
 langchain-huggingface
+
+vllm
