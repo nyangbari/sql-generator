@@ -8,7 +8,7 @@ from vllm import LLM as VLLM_Model, SamplingParams
 from langchain_core.language_models.llms import LLM
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
-from langchain.agents import AgentType
+
 from typing import Any, List, Optional, Mapping
 from pydantic import Field
 
@@ -130,7 +130,7 @@ class LangChainAgentBot:
             agent = create_sql_agent(
                 llm=self.llm,
                 db=db,
-                agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                agent_type="zero-shot-react-description",
                 verbose=True,
                 handle_parsing_errors=True,
                 max_iterations=5,
