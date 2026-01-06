@@ -58,3 +58,7 @@ langchain
 sqlalchemy
 pymysql
 python-dotenv
+
+# LangChain (최신)
+langchain-community
+langchain-core

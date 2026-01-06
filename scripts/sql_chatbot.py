@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 # sql_chatbot.py
-# LangChain 기반 멀티 프로젝트 SQL 챗봇
+# LangChain 최신 버전 (langchain-community 사용)
 
 import os
 from dotenv import load_dotenv
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from peft import PeftModel
-from langchain.llms import HuggingFacePipeline
-from langchain.sql_database import SQLDatabase
-from langchain.agents import create_sql_agent
-from langchain.agents.agent_types import AgentType
 
-# .env 로드
+# 최신 LangChain import
+from langchain_community.llms import HuggingFacePipeline
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits import create_sql_agent
+
 load_dotenv()
 
 class MultiProjectSQLBot:
@@ -50,10 +50,20 @@ class MultiProjectSQLBot:
         
         self.llm = HuggingFacePipeline(pipeline=pipe)
         
-        # DB 설정 (환경변수에서 로드)
+        # DB 설정 (환경변수에서)
         self.databases = {
             "knightfury": os.getenv("KNIGHTFURY_DB_URI"),
             "furyx": os.getenv("FURYX_DB_URI"),
+        }
+        
+        # 테이블 설명 (선택사항 - 나중에 추가 가능)
+        self.table_descriptions = {
+            "knightfury": {
+                "users": """사용자 정보
+  - tw_verified: 트위터 인증 여부 (1=완료, 0=미완료)
+  - tg_verified: 텔레그램 인증 여부 (1=완료, 0=미완료)
+""",
+            }
         }
         
         # 설정 확인
@@ -61,8 +71,8 @@ class MultiProjectSQLBot:
         for project, uri in self.databases.items():
             if uri:
                 # 비밀번호 숨기기
-                safe_uri = uri.replace(uri.split('@')[0].split(':')[-1], "****")
-                print(f"  ✅ {project}: {safe_uri}")
+                safe_uri = uri.split('@')[-1]
+                print(f"  ✅ {project}: mysql://***@{safe_uri}")
             else:
                 print(f"  ⚠️  {project}: 설정 안 됨")
         
@@ -94,17 +104,15 @@ class MultiProjectSQLBot:
                 
                 # 테이블 목록 출력
                 tables = db.get_usable_table_names()
-                print(f"📊 테이블: {', '.join(tables[:5])}{'...' if len(tables) > 5 else ''} (총 {len(tables)}개)")
+                print(f"📊 테이블 발견: {len(tables)}개")
+                print(f"   {', '.join(tables[:5])}{'...' if len(tables) > 5 else ''}")
                 
                 # SQL Agent 생성
                 agent = create_sql_agent(
                     llm=self.llm,
                     db=db,
-                    agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
                     verbose=True,
-                    handle_parsing_errors=True,
-                    max_iterations=5,
-                    max_execution_time=60
+                    handle_parsing_errors=True
                 )
                 
                 self.agents[project] = agent
@@ -126,7 +134,7 @@ class MultiProjectSQLBot:
         try:
             agent = self.get_agent(project)
             
-            print("🤔 생각 중...\n")
+            print("🤔 SQL 생성 중...\n")
             
             result = agent.run(question)
             
@@ -150,10 +158,10 @@ class MultiProjectSQLBot:
     def interactive(self):
         """대화형 모드"""
         print("\n🎯 대화형 모드 시작!")
-        print("명령어:")
-        print("  - 'list': 프로젝트 목록")
-        print("  - 'switch <project>': 프로젝트 변경")
-        print("  - 'exit' 또는 'quit': 종료")
+        print("\n명령어:")
+        print("  - 'list': 프로젝트 목록 보기")
+        print("  - 'switch <프로젝트명>': 프로젝트 변경")
+        print("  - 'exit' or 'quit': 종료")
         print("="*70)
         
         current_project = None
@@ -169,27 +177,30 @@ class MultiProjectSQLBot:
                     continue
                 
                 # 명령어 처리
-                if user_input.lower() in ['exit', 'quit']:
+                cmd = user_input.lower().strip()
+                
+                if cmd in ['exit', 'quit', 'q']:
                     print("\n👋 종료합니다!")
                     break
                 
-                elif user_input.lower() == 'list':
+                elif cmd == 'list':
                     self.list_projects()
                     continue
                 
-                elif user_input.lower().startswith('switch '):
-                    project = user_input.split()[1]
-                    if project.lower() in self.databases:
-                        current_project = project.lower()
-                        print(f"✅ {current_project} 프로젝트로 전환")
+                elif cmd.startswith('switch '):
+                    project = cmd.split()[1]
+                    if project in self.databases and self.databases[project]:
+                        current_project = project
+                        print(f"✅ {current_project} 프로젝트로 전환되었습니다")
                     else:
-                        print(f"❌ '{project}' 프로젝트가 없습니다.")
+                        print(f"❌ '{project}' 프로젝트를 찾을 수 없습니다")
                         self.list_projects()
                     continue
                 
                 # 질문 처리
                 if not current_project:
-                    print("❌ 먼저 프로젝트를 선택하세요. (예: switch knightfury)")
+                    print("❌ 먼저 프로젝트를 선택하세요")
+                    print("   예: switch knightfury")
                     self.list_projects()
                     continue
                 
@@ -201,25 +212,28 @@ class MultiProjectSQLBot:
             except Exception as e:
                 print(f"❌ 오류: {e}")
 
-# 사용 예시
+# 메인 실행
 if __name__ == "__main__":
-    # Bot 생성
     bot = MultiProjectSQLBot("./models/sql-generator-spider-plus-company")
     
-    # 프로젝트 목록
+    # 프로젝트 목록 표시
     bot.list_projects()
     
-    # 테스트 질문
+    # 간단한 테스트
     print("\n" + "="*70)
-    print("🧪 테스트 시작")
+    print("🧪 기본 테스트")
     print("="*70)
     
-    # KnightFury 프로젝트
-    bot.ask("knightfury", "사용자 테이블이 있어?")
-    bot.ask("knightfury", "총 사용자 수는 몇 명이야?")
+    try:
+        # KnightFury 테스트
+        bot.ask("knightfury", "테이블 목록을 보여줘")
+        
+        # 실제 질문 예시 (주석 처리)
+        # bot.ask("knightfury", "총 사용자 수는?")
+        # bot.ask("knightfury", "트위터 인증 완료한 유저는 몇 명?")
+        
+    except Exception as e:
+        print(f"테스트 중 오류: {e}")
     
-    # FuryX 프로젝트
-    # bot.ask("furyx", "테이블 목록 보여줘")
-    
-    # 대화형 모드
+    # 대화형 모드 시작 (선택사항)
     # bot.interactive()
