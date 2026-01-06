@@ -62,3 +62,6 @@ python-dotenv
 # LangChain (최신)
 langchain-community
 langchain-core
+
+# LangChain (최신)
+langchain-huggingface

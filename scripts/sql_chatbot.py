@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # sql_chatbot.py
-# LangChain 최신 버전 (langchain-community 사용)
+# LangChain 최신 버전 + MySQLdb 문제 해결
 
 import os
 from dotenv import load_dotenv
@@ -9,7 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from peft import PeftModel
 
 # 최신 LangChain import
-from langchain_community.llms import HuggingFacePipeline
+from langchain_huggingface import HuggingFacePipeline  # 업데이트!
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import create_sql_agent
 
@@ -50,21 +50,16 @@ class MultiProjectSQLBot:
         
         self.llm = HuggingFacePipeline(pipeline=pipe)
         
-        # DB 설정 (환경변수에서)
-        self.databases = {
-            "knightfury": os.getenv("KNIGHTFURY_DB_URI"),
-            "furyx": os.getenv("FURYX_DB_URI"),
-        }
+        # DB 설정 (pymysql 사용!)
+        knightfury_uri = os.getenv("KNIGHTFURY_DB_URI")
+        furyx_uri = os.getenv("FURYX_DB_URI")
         
-        # 테이블 설명 (선택사항 - 나중에 추가 가능)
-        self.table_descriptions = {
-            "knightfury": {
-                "users": """사용자 정보
-  - tw_verified: 트위터 인증 여부 (1=완료, 0=미완료)
-  - tg_verified: 텔레그램 인증 여부 (1=완료, 0=미완료)
-""",
-            }
-        }
+        # mysql:// → mysql+pymysql:// 변경
+        self.databases = {}
+        if knightfury_uri:
+            self.databases["knightfury"] = knightfury_uri.replace("mysql://", "mysql+pymysql://")
+        if furyx_uri:
+            self.databases["furyx"] = furyx_uri.replace("mysql://", "mysql+pymysql://")
         
         # 설정 확인
         print("\n📚 프로젝트 설정:")
@@ -72,7 +67,7 @@ class MultiProjectSQLBot:
             if uri:
                 # 비밀번호 숨기기
                 safe_uri = uri.split('@')[-1]
-                print(f"  ✅ {project}: mysql://***@{safe_uri}")
+                print(f"  ✅ {project}: mysql+pymysql://***@{safe_uri}")
             else:
                 print(f"  ⚠️  {project}: 설정 안 됨")
         
@@ -90,7 +85,7 @@ class MultiProjectSQLBot:
             uri = self.databases.get(project)
             
             if not uri:
-                available = [p for p, u in self.databases.items() if u]
+                available = list(self.databases.keys())
                 raise ValueError(
                     f"❌ 프로젝트 '{project}'를 찾을 수 없습니다.\n"
                     f"사용 가능한 프로젝트: {', '.join(available)}"
@@ -99,7 +94,7 @@ class MultiProjectSQLBot:
             print(f"\n🔗 {project} DB 연결 중...")
             
             try:
-                # MySQL DB 연결
+                # MySQL DB 연결 (pymysql 사용)
                 db = SQLDatabase.from_uri(uri)
                 
                 # 테이블 목록 출력
@@ -151,7 +146,7 @@ class MultiProjectSQLBot:
     
     def list_projects(self):
         """설정된 프로젝트 목록"""
-        configured = [p for p, u in self.databases.items() if u]
+        configured = list(self.databases.keys())
         print(f"\n📚 사용 가능한 프로젝트: {', '.join(configured)}")
         return configured
     
@@ -189,7 +184,7 @@ class MultiProjectSQLBot:
                 
                 elif cmd.startswith('switch '):
                     project = cmd.split()[1]
-                    if project in self.databases and self.databases[project]:
+                    if project in self.databases:
                         current_project = project
                         print(f"✅ {current_project} 프로젝트로 전환되었습니다")
                     else:
@@ -228,12 +223,8 @@ if __name__ == "__main__":
         # KnightFury 테스트
         bot.ask("knightfury", "테이블 목록을 보여줘")
         
-        # 실제 질문 예시 (주석 처리)
-        # bot.ask("knightfury", "총 사용자 수는?")
-        # bot.ask("knightfury", "트위터 인증 완료한 유저는 몇 명?")
-        
     except Exception as e:
         print(f"테스트 중 오류: {e}")
     
-    # 대화형 모드 시작 (선택사항)
+    # 대화형 모드 (주석 해제하면 활성화)
     # bot.interactive()
