@@ -63,11 +63,15 @@ class LangChainAgentBot:
                 db=self.db,
                 agent_type="zero-shot-react-description",
                 verbose=True,
-                handle_parsing_errors=True
+                handle_parsing_errors="Check your output format. If you have the final answer, use 'Final Answer:' prefix clearly."
             )
             print(f"\n🔍 질문: {question}")
             # 한글 답변 유도
-            prompt = f"질문에 대해 SQL을 생성하고 실행하여 한글로 답변하세요: {question}"
+            prompt = (
+                f"SQL을 사용하여 다음 질문에 답하세요. "
+                f"반드시 'Thought:', 'Action:', 'Final Answer:' 형식을 엄격히 지켜야 합니다. "
+                f"질문: {question}"
+            )
             result = agent.invoke({"input": prompt})
             print(f"\n💡 결과: {result.get('output')}")
         except Exception as e:
