@@ -1,67 +1,62 @@
 #!/usr/bin/env python3
 import os
-from typing import Any, List, Optional, Mapping
+import torch
+from typing import Any, List, Optional
 from dotenv import load_dotenv
-from pydantic import Field
 
-# vLLM 및 최신 LangChain 모듈 경로 수정
-from vllm import LLM as VLLM_Model, SamplingParams
-from langchain_core.language_models.llms import LLM  # 경로 수정됨
+# 모듈 임포트 에러를 방지하는 최신 경로
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from peft import PeftModel
+from langchain_huggingface import HuggingFacePipeline
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_community.agent_toolkits.sql.base import create_sql_agent
-from langchain.agents.agent_types import AgentType
+
+# AgentType 에러를 피하기 위해 문자열로 직접 지정하거나 아래 경로를 시도합니다.
+try:
+    from langchain.agents.agent_types import AgentType
+except ImportError:
+    try:
+        from langchain.agents import AgentType
+    except ImportError:
+        # 두 곳 다 안될 경우 내부 문자열로 대체되도록 설정
+        AgentType = None
 
 load_dotenv()
 
+# --- [보안 클래스] ---
 class ReadOnlySQLDatabase(SQLDatabase):
-    """보안이 강화된 Read-Only SQL Database"""
     WRITE_KEYWORDS = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE', 'MERGE']
-
     def run(self, command: str, fetch: str = "all", **kwargs):
         sql_upper = command.upper().strip()
         for keyword in self.WRITE_KEYWORDS:
-            if keyword in sql_upper:
-                raise ValueError(f"🚫 {keyword} 차단됨! SELECT만 가능합니다.")
-        
+            if keyword in sql_upper: raise ValueError(f"🚫 {keyword} 차단!")
         if not any(sql_upper.startswith(k) for k in ['SELECT', 'SHOW', 'DESCRIBE']):
-            raise ValueError("🚫 허용되지 않은 쿼리 타입입니다.")
-        
-        print(f"✅ [실제 DB 쿼리 실행]")
+            raise ValueError("🚫 허용되지 않은 쿼리")
+        print(f"✅ [실제 DB 조회]")
         return super().run(command, fetch=fetch, **kwargs)
-
-class VLLMWrapper(LLM):
-    vllm_model: Any = Field(default=None, exclude=True)
-    sampling_params: Any = Field(default=None, exclude=True)
-
-    def __init__(self, model_path: str, **kwargs):
-        super().__init__(**kwargs)
-        print("🔄 vLLM 로딩 (RTX 4060 Ti 최적화 모드)...")
-        self.vllm_model = VLLM_Model(
-            model=model_path,
-            tensor_parallel_size=1,
-            gpu_memory_utilization=0.8,
-            max_model_len=1024, # 메모리 부족 방지를 위해 길이 제한
-            enforce_eager=True,
-            dtype="float16"
-        )
-        self.sampling_params = SamplingParams(
-            temperature=0.0, # 정확한 SQL 생성을 위해 0으로 설정
-            max_tokens=256,
-            stop=["Observation:"]
-        )
-
-    def _call(self, prompt: str, stop: Optional[List[str]] = None, **kwargs) -> str:
-        outputs = self.vllm_model.generate([prompt], self.sampling_params)
-        return outputs[0].outputs[0].text
-
-    @property
-    def _llm_type(self) -> str: return "vllm"
 
 class LangChainAgentBot:
     def __init__(self, model_path):
-        self.llm = VLLMWrapper(model_path=model_path)
+        print("🚀 모델 로딩 (8-bit 안정 모드)...")
+        base_model_id = "codellama/CodeLlama-7b-Instruct-hf"
+        
+        # vLLM의 메모리 에러를 피하기 위해 transformers 8-bit 사용
+        tokenizer = AutoTokenizer.from_pretrained(base_model_id)
+        base_model = AutoModelForCausalLM.from_pretrained(
+            base_model_id, torch_dtype=torch.float16, device_map="auto", load_in_8bit=True
+        )
+        
+        model = PeftModel.from_pretrained(base_model, model_path)
+        model = model.merge_and_unload()
+        
+        pipe = pipeline(
+            "text-generation", model=model, tokenizer=tokenizer,
+            max_new_tokens=256, temperature=0.1, top_p=0.9, return_full_text=False
+        )
+        self.llm = HuggingFacePipeline(pipeline=pipe)
+        
+        # DB 설정
         self.databases = {}
-        # .env 파일에서 URI 로드
         for proj in ["KNIGHTFURY", "FURYX"]:
             uri = os.getenv(f"{proj}_DB_URI")
             if uri: self.databases[proj.lower()] = uri.replace("mysql://", "mysql+pymysql://")
@@ -72,15 +67,15 @@ class LangChainAgentBot:
         project = project.lower()
         if project not in self.agents:
             uri = self.databases.get(project)
-            if not uri: raise ValueError(f"'{project}' URI 없음")
+            if not uri: raise ValueError(f"'{project}' DB 설정 없음")
             
-            # 실제 DB 연결 및 스키마 정보 강제 로드
             db = ReadOnlySQLDatabase.from_uri(uri)
             
+            # AgentType 에러 방지를 위해 직접 문자열 "zero-shot-react-description" 사용
             self.agents[project] = create_sql_agent(
                 llm=self.llm,
                 db=db,
-                agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                agent_type="zero-shot-react-description", 
                 verbose=True,
                 handle_parsing_errors=True
             )
@@ -90,20 +85,15 @@ class LangChainAgentBot:
         print(f"\n📂 프로젝트: {project} | 질문: {question}")
         try:
             agent = self.get_agent(project)
-            # 모델이 실제 테이블 목록을 먼저 확인하도록 지시하는 프롬프트
-            prompt = (
-                f"당신은 SQL 전문가입니다. 반드시 다음 순서를 지키세요:\n"
-                f"1. `sql_db_list_tables`로 존재하는 테이블을 확인한다.\n"
-                f"2. 질문과 관련된 테이블이 없으면 '정보 없음'이라고 답한다.\n"
-                f"3. 테이블이 있으면 `sql_db_schema`를 확인 후 쿼리한다.\n"
-                f"질문: {question}"
-            )
+            # 환각 방지: 테이블 목록을 먼저 보도록 강제
+            prompt = f"1. sql_db_list_tables로 테이블 목록 확인\n2. 실제 있는 테이블만 쿼리\n질문: {question}"
             result = agent.invoke({"input": prompt})
-            print(f"💡 답변: {result.get('output')}")
+            print(f"\n💡 결과: {result.get('output')}")
         except Exception as e:
             print(f"❌ 에러: {e}")
 
 if __name__ == "__main__":
     MODEL_PATH = "/home/dongsucat1/ai/sql-generator/models/sql-generator-spider-plus-company"
     bot = LangChainAgentBot(MODEL_PATH)
-    bot.ask("knightfury", "현재 데이터베이스에 존재하는 모든 테이블의 목록을 알려줘.")
+    # 가짜 user 테이블 대신, 실제 테이블 목록을 불러오는지 테스트
+    bot.ask("knightfury", "현재 DB에 어떤 테이블들이 있는지 이름만 다 알려줘.")
