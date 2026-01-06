@@ -51,8 +51,8 @@ class VLLMWrapper(LLM):
             enable_lora=True,          # LoRA 기능 활성화
             max_lora_rank=64,          # 어댑터 랭크 설정
             tensor_parallel_size=1,
-            gpu_memory_utilization=0.8,
-            max_model_len=4096,
+            gpu_memory_utilization=0.6,
+            max_model_len=2048,
             dtype="float16"
         )
         
