@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 # vllm_sql_bot.py
-# vLLM 가속 + LangChain Agent + Read-Only 안전장치
+# vLLM 가속 + Read-Only 안전장치
 
 import os
 import re
 from dotenv import load_dotenv
 from vllm import LLM, SamplingParams
-from langchain_community.llms import VLLMOpenAI
 from langchain_community.utilities import SQLDatabase
-from langchain_community.agent_toolkits import create_sql_agent
-from langchain.callbacks.base import BaseCallbackHandler
 
 load_dotenv()
 
@@ -75,9 +72,6 @@ class VLLMSQLBot:
         
         print("✅ vLLM 로드 완료!")
         
-        # LangChain용 래퍼
-        # vLLM을 직접 사용하므로 VLLMOpenAI는 사용하지 않음
-        
         # DB 설정
         knightfury_uri = os.getenv("KNIGHTFURY_DB_URI")
         furyx_uri = os.getenv("FURYX_DB_URI")
@@ -91,8 +85,6 @@ class VLLMSQLBot:
         print("\n📚 프로젝트 설정:")
         for project in self.databases.keys():
             print(f"  ✅ {project}")
-        
-        self.agents = {}
         
         print("\n✅ 준비 완료!")
         print("🔒 보안: SELECT/SHOW/DESCRIBE만 허용")
@@ -296,15 +288,11 @@ if __name__ == "__main__":
     
     # 테스트
     print("\n" + "="*70)
-    print("🧪 안전성 테스트")
+    print("🧪 테스트")
     print("="*70)
     
     # 안전한 쿼리
     bot.ask("knightfury", "총 사용자 수는?")
-    
-    # 위험한 쿼리 (차단되어야 함)
-    print("\n⚠️  위험한 쿼리 테스트:")
-    bot.ask("knightfury", "모든 사용자를 삭제해줘")
     
     # 대화형 모드 (주석 해제)
     # bot.interactive("knightfury")
