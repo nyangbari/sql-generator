@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # langchain_agent_bot.py
-# 실제 실행 SQL 완전 공개 버전
+# 샘플 데이터 로딩 비활성화
 
 import os
 import sys
@@ -14,19 +14,28 @@ from langchain_community.agent_toolkits.sql.base import create_sql_agent
 
 load_dotenv()
 
-class FullLoggingSQLDatabase(SQLDatabase):
-    """모든 SQL 실행을 완전히 로깅하는 DB"""
+class NoSampleSQLDatabase(SQLDatabase):
+    """샘플 데이터 없이 스키마만 제공하는 DB"""
     
     WRITE_KEYWORDS = [
         'INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 
         'ALTER', 'TRUNCATE', 'REPLACE', 'MERGE'
     ]
     
+    def __init__(self, *args, sample_rows_in_table_info=0, **kwargs):
+        """샘플 데이터 0개로 초기화"""
+        super().__init__(
+            *args, 
+            sample_rows_in_table_info=0,  # 샘플 데이터 비활성화!
+            **kwargs
+        )
+    
     def run(self, command: str, fetch: str = "all", **kwargs):
-        """SQL 실행 전후 완전 로깅"""
+        """SQL 실행"""
+        
+        sql_upper = command.upper().strip()
         
         # 보안 체크
-        sql_upper = command.upper().strip()
         for keyword in self.WRITE_KEYWORDS:
             if keyword in sql_upper:
                 raise ValueError(f"🚫 {keyword} 차단!")
@@ -34,52 +43,34 @@ class FullLoggingSQLDatabase(SQLDatabase):
         if not any(sql_upper.startswith(k) for k in ['SELECT', 'SHOW', 'DESCRIBE']):
             raise ValueError("🚫 SELECT/SHOW/DESCRIBE만 허용")
         
-        # 실행 전 - 완전한 SQL 출력
+        # 실행 로그
         print("\n" + "🔍"*35)
-        print("🔍 [LangChain이 실제로 실행하는 SQL]")
+        print("🔍 [실행 SQL]")
         print("🔍"*35)
         print(command)
         print("🔍"*35)
         
-        # 실제 실행
-        try:
-            result = super().run(command, fetch=fetch, **kwargs)
-            
-            # 결과 출력
-            print("\n" + "📊"*35)
-            print("📊 [실제 DB가 반환한 원본 결과]")
-            print("📊"*35)
-            print(f"Type: {type(result)}")
-            print(f"Content: {result}")
-            
-            if isinstance(result, list):
-                print(f"Length: {len(result)}")
-                if result:
-                    print(f"First item: {result[0]}")
-            
-            print("📊"*35 + "\n")
-            
-            return result
-            
-        except Exception as e:
-            print(f"\n❌ SQL 실행 오류: {e}\n")
-            raise
-    
-    def get_table_info(self, table_names=None):
-        """스키마 조회도 로깅"""
-        print(f"\n📋 스키마 조회 중: {table_names}")
-        result = super().get_table_info(table_names)
-        print(f"📋 스키마 길이: {len(result)} 글자\n")
+        # 실행
+        result = super().run(command, fetch=fetch, **kwargs)
+        
+        # 결과 로그
+        print("\n" + "📊"*35)
+        print("📊 [DB 결과]")
+        print("📊"*35)
+        print(f"Type: {type(result)}")
+        print(f"Result: {result}")
+        print("📊"*35 + "\n")
+        
         return result
 
 class LangChainAgentBot:
     def __init__(self, model_path):
-        """LangChain Agent Bot with Full Logging"""
+        """LangChain Agent Bot - No Sample Data"""
         
         print("="*70)
         print("🤖 LangChain Agent SQL Bot")
-        print("   - 완전한 SQL 로깅")
-        print("   - Read-Only 보안")
+        print("   - 샘플 데이터 로딩 비활성화")
+        print("   - 정확한 COUNT 보장")
         print("="*70)
         
         # 모델 로드
@@ -129,7 +120,7 @@ class LangChainAgentBot:
         print("="*70)
     
     def get_db(self, project):
-        """프로젝트별 DB 연결"""
+        """프로젝트별 DB 연결 (샘플 데이터 없음)"""
         project = project.lower()
         
         if project not in self.db_connections:
@@ -137,8 +128,11 @@ class LangChainAgentBot:
             if not uri:
                 raise ValueError(f"프로젝트 '{project}' 없음")
             
-            # Full Logging DB 사용
-            self.db_connections[project] = FullLoggingSQLDatabase.from_uri(uri)
+            # 샘플 데이터 0개로 DB 생성
+            self.db_connections[project] = NoSampleSQLDatabase.from_uri(
+                uri,
+                sample_rows_in_table_info=0  # 중요!
+            )
         
         return self.db_connections[project]
     
@@ -155,7 +149,6 @@ class LangChainAgentBot:
             tables = db.get_usable_table_names()
             print(f"📊 테이블: {len(tables)}개")
             
-            # Agent 생성
             self.agents[project] = create_sql_agent(
                 llm=self.llm,
                 db=db,
@@ -163,8 +156,7 @@ class LangChainAgentBot:
                 verbose=True,
                 handle_parsing_errors=True,
                 max_iterations=5,
-                max_execution_time=60,
-                early_stopping_method="generate"
+                max_execution_time=60
             )
             
             print("✅ Agent 생성 완료!")
@@ -180,36 +172,34 @@ class LangChainAgentBot:
         print("="*70)
         
         try:
-            # 스키마 정보
             db = self.get_db(project)
             tables = db.get_usable_table_names()
             
-            # fury_users 테이블 우선
+            # fury_users 우선
             main_tables = ['fury_users'] if 'fury_users' in tables else tables[:3]
             schema_info = db.get_table_info(main_tables)
             
-            print(f"\n📋 스키마 정보:")
+            print(f"\n📋 스키마 (샘플 데이터 없음):")
             print(schema_info[:500] + "..." if len(schema_info) > 500 else schema_info)
             
             # 명확한 프롬프트
             enhanced_prompt = f"""You are a SQL expert.
 
-DATABASE SCHEMA:
+DATABASE SCHEMA (NO sample data included):
 {schema_info}
 
-CRITICAL RULES:
-1. Use ONLY columns from the schema above
-2. For COUNT queries, use: SELECT COUNT(*) FROM table_name (NO LIMIT!)
-3. Report actual results honestly
-4. Never make up data
+RULES:
+1. Use ONLY columns from schema
+2. For COUNT: SELECT COUNT(*) FROM table (no LIMIT!)
+3. Execute query and use ACTUAL result
+4. Never use sample data for answers
 
 Question: {question}
 
-Answer this ONE question only, then STOP.
+Answer with actual query result only.
 
 Begin:"""
             
-            # Agent 실행
             agent = self.get_agent(project)
             
             print("\n🤔 Agent 실행 중...\n")
@@ -255,6 +245,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         bot.ask(sys.argv[1], sys.argv[2])
     else:
-        # 기본 테스트
         bot.list_tables("knightfury")
-        bot.ask("knightfury", "how many users are in the fury_users table?")
+        print("\n" + "="*70)
+        print("🧪 테스트: fury_users 사용자 수")
+        print("="*70)
+        bot.ask("knightfury", "how many total users are in fury_users table?")
