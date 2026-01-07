@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # langchain_simple_chain.py
-# 현업 스타일: Agent 없이 Simple Chain
+# 현업 스타일: Simple Chain (올바른 import)
 
 import os
 import sys
@@ -10,8 +10,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from peft import PeftModel
 from langchain_huggingface import HuggingFacePipeline
 from langchain_community.utilities.sql_database import SQLDatabase
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate  # 수정!
+from langchain_core.output_parsers import StrOutputParser  # 수정!
 from sqlalchemy import inspect
 
 load_dotenv()
@@ -22,9 +22,6 @@ class SimpleSQLChain:
     def __init__(self, model_path):
         print("="*70)
         print("🤖 LangChain Simple Chain (현업 스타일)")
-        print("   - Agent 없음")
-        print("   - 예측 가능한 흐름")
-        print("   - 멈춤 문제 없음")
         print("="*70)
         
         print("\n🔄 모델 로딩...")
@@ -42,7 +39,7 @@ class SimpleSQLChain:
         model = PeftModel.from_pretrained(base_model, model_path)
         model = model.merge_and_unload()
         
-        print("✅ 모델 로드 완료!")
+        print("✅ 모델 로드!")
         
         pipe = pipeline(
             "text-generation",
@@ -55,7 +52,7 @@ class SimpleSQLChain:
         
         self.llm = HuggingFacePipeline(pipeline=pipe)
         
-        # DB 설정
+        # DB
         self.databases = {}
         for proj in ["KNIGHTFURY", "FURYX"]:
             uri = os.getenv(f"{proj}_DB_URI")
@@ -66,7 +63,7 @@ class SimpleSQLChain:
         print("="*70)
     
     def get_schema(self, db, table_names):
-        """스키마 가져오기"""
+        """스키마"""
         inspector = inspect(db._engine)
         
         schema = ""
@@ -83,7 +80,7 @@ class SimpleSQLChain:
         return schema
     
     def ask(self, project, question):
-        """질문 → SQL → 실행 → 답변 (Chain)"""
+        """질문 처리"""
         
         print("\n" + "="*70)
         print(f"📂 {project} | 💬 {question}")
@@ -95,7 +92,7 @@ class SimpleSQLChain:
             return None
         
         try:
-            # DB 연결
+            # DB
             db = SQLDatabase.from_uri(uri, sample_rows_in_table_info=0)
             
             # 스키마
@@ -105,73 +102,81 @@ class SimpleSQLChain:
             
             print(f"\n📋 스키마:\n{schema}")
             
-            # Step 1: SQL 생성 Chain
-            sql_prompt = PromptTemplate(
-                input_variables=["schema", "question"],
-                template="""Given this database schema:
+            # ===== Step 1: SQL 생성 =====
+            print("\n🔄 Step 1: SQL 생성...")
+            
+            sql_prompt = PromptTemplate.from_template(
+                """Given this database schema:
 
 {schema}
 
 Generate a SQL query to answer: {question}
 
-Return ONLY the SQL query, nothing else.
+Return ONLY the SQL query.
 
 SQL:"""
             )
             
-            sql_chain = LLMChain(llm=self.llm, prompt=sql_prompt)
+            # Chain: prompt | llm | parser
+            sql_chain = sql_prompt | self.llm | StrOutputParser()
             
-            print("\n🔄 Step 1: SQL 생성 중...")
-            
-            sql = sql_chain.run(schema=schema, question=question)
+            sql = sql_chain.invoke({
+                "schema": schema,
+                "question": question
+            })
             
             # SQL 정리
             sql = sql.strip()
             sql = sql.replace('```sql', '').replace('```', '').strip()
             sql = sql.split('\n')[0] if '\n\n' in sql else sql
             
-            # 보안 체크
+            # 보안
             sql_upper = sql.upper()
             if any(kw in sql_upper for kw in ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER']):
-                print("🚫 위험한 SQL 차단!")
+                print("🚫 위험한 SQL!")
                 return None
             
-            print(f"\n💾 생성된 SQL:\n{sql}")
+            print(f"\n💾 SQL:\n{sql}")
             
-            # Step 2: SQL 실행
-            print("\n🔄 Step 2: 실행 중...")
+            # ===== Step 2: 실행 =====
+            print("\n🔄 Step 2: 실행...")
+            
             result = db.run(sql)
             
-            print(f"\n📊 DB 결과:\n{result}")
+            print(f"\n📊 결과:\n{result}")
             
-            # Step 3: 답변 생성 Chain
-            answer_prompt = PromptTemplate(
-                input_variables=["question", "sql", "result"],
-                template="""Question: {question}
+            # ===== Step 3: 답변 생성 =====
+            print("\n🔄 Step 3: 답변 생성...")
+            
+            answer_prompt = PromptTemplate.from_template(
+                """Question: {question}
 SQL: {sql}
 Result: {result}
 
-Provide a natural language answer in one sentence.
+Provide a natural language answer.
 
 Answer:"""
             )
             
-            answer_chain = LLMChain(llm=self.llm, prompt=answer_prompt)
+            answer_chain = answer_prompt | self.llm | StrOutputParser()
             
-            print("\n🔄 Step 3: 답변 생성 중...")
+            answer = answer_chain.invoke({
+                "question": question,
+                "sql": sql,
+                "result": result
+            })
             
-            answer = answer_chain.run(question=question, sql=sql, result=result)
             answer = answer.strip().split('\n')[0]
             
             print("\n" + "="*70)
-            print(f"💡 최종 답변:")
+            print(f"💡 답변:")
             print(answer)
             print("="*70)
             
             return answer
             
         except Exception as e:
-            print(f"\n❌ 오류: {e}")
+            print(f"\n❌ {e}")
             print("="*70)
             import traceback
             traceback.print_exc()
@@ -186,7 +191,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         bot.ask(sys.argv[1], sys.argv[2])
     else:
-        # 테스트
         bot.ask("knightfury", "How many users are in fury_users?")
-        print("\n")
-        bot.ask("knightfury", "What networks exist in fury_users?")
