@@ -193,4 +193,4 @@ if __name__ == "__main__":
         bot.ask(sys.argv[1], sys.argv[2])
     else:
         # 테스트
-        bot.ask("knightfury", "얼마나 많은 퀘스트가 있어?")
+        bot.ask("knightfury", "얼마나 많은 미션이 있어?")
