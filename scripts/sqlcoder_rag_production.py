@@ -84,6 +84,18 @@ class SQLCoderRAGBot:
             table_info = {}
             
             print(f"   {project}: {len(all_tables)}개 테이블 인덱싱...")
+
+            table_descriptions = {
+                'fury_action_configs': 'KnightFury dashboard basic actions/quests/missions. Platform-level missions like connect Telegram, Discord, Twitter. System missions, not project quests.',
+                'fury_mission_configs': 'Mission type definitions and templates. Defines KINDS of missions/quests: quiz, visit, NFT mint, swap. Mission categories and types.',
+                'fury_projects': 'Projects registered with KnightFury. Companies wanting users to complete missions/quests. General project information.',
+                'fury_airdrop_projects': 'Projects planning airdrops. Airdrop-specific projects only. Token airdrop projects.',
+                'fury_project_missions': 'Quests that projects registered. Project-specific missions/quests. Which missions each project has. Project quests/missions.',
+                'fury_user_project_missions': 'User mission completion tracking. Which users completed which missions/quests. User progress on quests/missions.',
+                'fury_users': 'User accounts and profiles. User information: wallet, username, social connections.',
+                'fury_play_games': 'Games available on platform. Game information and details.',
+                'fury_spin_events': 'Spin wheel events. Lucky spin game events/missions.',
+            }
             
             for table in all_tables:
                 try:
@@ -118,12 +130,17 @@ class SQLCoderRAGBot:
                         col_defs.append(f"    {col['name']} {col_type}{pk_marker}")
                     
                     create_stmt += ",\n".join(col_defs) + "\n)"
-                    
+                
+                description = table_descriptions.get(
+                        table,
+                        f"Table containing {table.replace('fury_', '').replace('_', ' ')} related data"
+                    )
+
                     # 검색용 텍스트 (테이블명 + 컬럼명 + 설명)
                     search_text = f"""
-Table: {table}
+Purpose: {description}
 Columns: {', '.join(col_names)}
-Description: Table containing {table.replace('fury_', '').replace('_', ' ')} data
+Use for queries about: {description}
 Schema:
 {create_stmt}
 """
@@ -135,7 +152,8 @@ Schema:
                             "table": table,
                             "columns": col_names,
                             "types": col_types,
-                            "create_statement": create_stmt
+                            "create_statement": create_stmt,
+                            "description": description
                         }
                     )
                     
@@ -143,7 +161,8 @@ Schema:
                     table_info[table] = {
                         "columns": col_names,
                         "types": col_types,
-                        "create_statement": create_stmt
+                        "create_statement": create_stmt,
+                        "description": description
                     }
                     
                 except Exception as e:
