@@ -12,7 +12,7 @@ from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.vectorstores import FAISS
-from langchain.docstore.document import Document
+from langchain_core.documents import Document
 from sqlalchemy import inspect
 import json
 
