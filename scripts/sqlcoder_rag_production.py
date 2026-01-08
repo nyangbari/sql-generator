@@ -14,7 +14,6 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from sqlalchemy import inspect
-import json
 
 load_dotenv()
 
@@ -52,7 +51,6 @@ class SQLCoderRAGBot:
         
         self.llm = HuggingFacePipeline(pipeline=pipe)
         
-        # DB 연결
         self.databases = {}
         for proj in ["KNIGHTFURY", "FURYX"]:
             uri = os.getenv(f"{proj}_DB_URI")
@@ -61,7 +59,6 @@ class SQLCoderRAGBot:
         
         print(f"\n📚 프로젝트: {', '.join(self.databases.keys())}")
         
-        # RAG 준비
         self.vector_stores = {}
         self.table_info_cache = {}
         
@@ -84,7 +81,7 @@ class SQLCoderRAGBot:
             table_info = {}
             
             print(f"   {project}: {len(all_tables)}개 테이블 인덱싱...")
-
+            
             table_descriptions = {
                 'fury_action_configs': 'KnightFury dashboard basic actions/quests/missions. Platform-level missions like connect Telegram, Discord, Twitter. System missions, not project quests.',
                 'fury_mission_configs': 'Mission type definitions and templates. Defines KINDS of missions/quests: quiz, visit, NFT mint, swap. Mission categories and types.',
@@ -103,18 +100,15 @@ class SQLCoderRAGBot:
                     pk = inspector.get_pk_constraint(table)
                     pk_cols = pk.get('constrained_columns', [])
                     
-                    # 테이블 정보
                     col_names = [col['name'] for col in columns]
                     col_types = {col['name']: str(col['type']) for col in columns}
                     
-                    # CREATE TABLE 문
                     create_stmt = f"CREATE TABLE {table} (\n"
                     col_defs = []
                     
                     for col in columns:
                         col_type = str(col['type'])
                         
-                        # 타입 단순화
                         if 'INT' in col_type.upper():
                             col_type = "INT"
                         elif 'VARCHAR' in col_type.upper() or 'CHAR' in col_type.upper():
@@ -130,22 +124,19 @@ class SQLCoderRAGBot:
                         col_defs.append(f"    {col['name']} {col_type}{pk_marker}")
                     
                     create_stmt += ",\n".join(col_defs) + "\n)"
-                
-                description = table_descriptions.get(
+                    
+                    description = table_descriptions.get(
                         table,
                         f"Table containing {table.replace('fury_', '').replace('_', ' ')} related data"
                     )
-
-                    # 검색용 텍스트 (테이블명 + 컬럼명 + 설명)
-                    search_text = f"""
+                    
+                    search_text = f"""Table: {table}
 Purpose: {description}
 Columns: {', '.join(col_names)}
 Use for queries about: {description}
 Schema:
-{create_stmt}
-"""
+{create_stmt}"""
                     
-                    # Document 생성
                     doc = Document(
                         page_content=search_text,
                         metadata={
@@ -168,7 +159,6 @@ Schema:
                 except Exception as e:
                     print(f"      ⚠️  {table}: {e}")
             
-            # 임베딩 & 벡터 스토어
             embeddings = HuggingFaceEmbeddings(
                 model_name="sentence-transformers/all-MiniLM-L6-v2"
             )
@@ -190,11 +180,8 @@ Schema:
             return []
         
         vector_store = self.vector_stores[project]
-        
-        # 유사도 검색
         docs = vector_store.similarity_search(question, k=k)
         
-        # 테이블 정보 추출
         tables = []
         for doc in docs:
             table_name = doc.metadata["table"]
@@ -209,10 +196,8 @@ Schema:
     def generate_sql(self, question, tables):
         """SQLCoder로 SQL 생성"""
         
-        # 스키마 조합
         schema = "\n\n".join([t["schema"] for t in tables])
         
-        # SQLCoder 프롬프트 형식
         prompt = f"""### Task
 Generate a SQL query to answer the following question: `{question}`
 
@@ -238,11 +223,9 @@ Given the database schema, here is the SQL query that answers `{question}`:
         
         result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        # SQL 추출
         if "```sql" in result:
             sql = result.split("```sql")[-1].split("```")[0].strip()
         else:
-            # ### Answer 이후 첫 번째 SELECT 문
             after_answer = result.split("### Answer")[-1]
             lines = after_answer.strip().split('\n')
             sql_lines = []
@@ -251,10 +234,8 @@ Given the database schema, here is the SQL query that answers `{question}`:
                     sql_lines.append(line)
                     if ';' in line:
                         break
-        
             sql = '\n'.join(sql_lines).strip()
         
-        # 정리
         sql = sql.replace('```sql', '').replace('```', '').strip()
         if ';' in sql:
             sql = sql.split(';')[0].strip()
@@ -266,14 +247,12 @@ Given the database schema, here is the SQL query that answers `{question}`:
         
         sql_upper = sql.upper()
         
-        # 보안: 위험한 키워드
         dangerous = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE']
         if any(kw in sql_upper for kw in dangerous):
-            return None, "🚫 위험한 SQL (수정 작업 차단)"
+            return None, "🚫 위험한 SQL"
         
-        # SELECT로 시작하는지
         if not sql_upper.strip().startswith('SELECT'):
-            return None, "⚠️  SELECT로 시작하지 않음"
+            return None, "⚠️  SELECT만 가능"
         
         return sql, None
     
@@ -291,7 +270,6 @@ Given the database schema, here is the SQL query that answers `{question}`:
             return None
         
         try:
-            # Step 1: RAG로 관련 테이블 검색
             print("\n🔍 Step 1: RAG 검색...")
             
             relevant_tables = self.retrieve_relevant_tables(project, question, k=3)
@@ -302,7 +280,6 @@ Given the database schema, here is the SQL query that answers `{question}`:
             
             print(f"   찾은 테이블: {[t['name'] for t in relevant_tables]}")
             
-            # Step 2: SQL 생성
             print("\n🔄 Step 2: SQL 생성...")
             
             sql = self.generate_sql(question, relevant_tables)
@@ -310,14 +287,12 @@ Given the database schema, here is the SQL query that answers `{question}`:
             print(f"\n💾 생성된 SQL:")
             print(sql)
             
-            # Step 3: 검증
             sql, error = self.validate_sql(sql)
             
             if error:
                 print(f"\n{error}")
                 return None
             
-            # Step 4: 실행
             print("\n🔄 Step 3: 실행...")
             
             db = SQLDatabase.from_uri(uri, sample_rows_in_table_info=0)
@@ -326,14 +301,11 @@ Given the database schema, here is the SQL query that answers `{question}`:
             print(f"\n📊 결과:")
             print(result)
             
-            # Step 5: 답변
             if result and result != "[]":
                 try:
-                    # 숫자 추출
                     if '[(' in str(result):
                         num = str(result).split('(')[1].split(',')[0].strip()
                         
-                        # 여러 행인 경우
                         if result.count('(') > 1:
                             answer = f"결과:\n{result}"
                         else:
@@ -362,35 +334,28 @@ Given the database schema, here is the SQL query that answers `{question}`:
             traceback.print_exc()
             return None
 
-# 실행
 if __name__ == "__main__":
     
     bot = SQLCoderRAGBot()
     
     if len(sys.argv) > 2:
-        # 단일 질문
         bot.ask(sys.argv[1], sys.argv[2])
     else:
-        # Interactive 모드
         projects = list(bot.databases.keys())
         
         if not projects:
-            print("\n❌ 설정된 프로젝트가 없습니다")
-            print("   .env 파일에 DB 설정을 추가하세요")
+            print("\n❌ 프로젝트 없음")
             sys.exit(1)
         
-        print(f"\n📚 사용 가능한 프로젝트: {', '.join(projects)}")
-        project = input("프로젝트 선택: ").strip().lower()
+        print(f"\n📚 프로젝트: {', '.join(projects)}")
+        project = input("선택: ").strip().lower()
         
         if project not in projects:
-            print(f"❌ '{project}' 프로젝트가 없습니다")
+            print(f"❌ '{project}' 없음")
             sys.exit(1)
         
-        print(f"\n✅ '{project}' 선택됨")
-        print("\n💬 질문을 입력하세요 (종료: exit)")
-        print("   예: How many projects?")
-        print("   예: Show me all missions")
-        print("   예: 사용자가 몇 명이야?")
+        print(f"\n✅ '{project}' 선택")
+        print("\n💬 질문 입력 (종료: exit)")
         print("")
         
         while True:
@@ -398,16 +363,12 @@ if __name__ == "__main__":
                 question = input(f"\n[{project}] ").strip()
                 
                 if question.lower() in ['exit', 'quit', 'q']:
-                    print("\n👋 종료합니다")
+                    print("\n👋")
                     break
                 
-                if not question:
-                    continue
-                
-                bot.ask(project, question)
-                
+                if question:
+                    bot.ask(project, question)
+                    
             except KeyboardInterrupt:
-                print("\n\n👋 종료합니다")
+                print("\n\n👋")
                 break
-            except Exception as e:
-                print(f"\n❌ {e}")
