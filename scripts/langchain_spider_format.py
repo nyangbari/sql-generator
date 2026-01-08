@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # langchain_spider_format.py
-# Spider 학습 형식 그대로 사용
+# WHERE 환각 방지 버전
 
 import os
 import sys
@@ -17,12 +17,11 @@ from sqlalchemy import inspect
 load_dotenv()
 
 class SpiderFormatBot:
-    """Spider 형식 프롬프트 사용"""
     
     def __init__(self, model_path):
         print("="*70)
-        print("🤖 Spider Format SQL Bot")
-        print("   학습한 형식 그대로 사용!")
+        print("🤖 Spider Format SQL Bot v2")
+        print("   WHERE 환각 방지!")
         print("="*70)
         
         print("\n🔄 로딩...")
@@ -67,7 +66,7 @@ class SpiderFormatBot:
         
         keywords = {
             'user': ['user'],
-            'mission': ['mission', 'quest'],
+            'mission': ['mission', 'quest', 'task'],
             'project': ['project', 'airdrop'],
             'game': ['game', 'play'],
             'config': ['config'],
@@ -84,10 +83,15 @@ class SpiderFormatBot:
         if not selected:
             selected = {'fury_users'}
         
+        # mission 관련이면 fury_mission_configs 우선
+        if 'mission' in q:
+            if 'fury_mission_configs' in all_tables:
+                return ['fury_mission_configs']
+        
         return list(selected)[:2]
     
     def get_spider_schema(self, db, tables):
-        """Spider 형식 스키마 (학습한 형식!)"""
+        """Spider 형식 스키마"""
         
         inspector = inspect(db._engine)
         schema = ""
@@ -98,14 +102,12 @@ class SpiderFormatBot:
                 pk = inspector.get_pk_constraint(table)
                 pk_cols = pk.get('constrained_columns', [])
                 
-                # Spider 형식 그대로!
                 schema += f"CREATE TABLE {table} (\n"
                 
                 col_defs = []
                 for col in columns:
                     col_type = str(col['type'])
                     
-                    # INT, VARCHAR만 (Spider 스타일)
                     if 'INT' in col_type.upper():
                         col_type = "INT"
                     elif 'VARCHAR' in col_type.upper() or 'CHAR' in col_type.upper():
@@ -116,7 +118,6 @@ class SpiderFormatBot:
                         col_type = "DATETIME"
                     
                     pk_marker = " PRIMARY KEY" if col['name'] in pk_cols else ""
-                    
                     col_defs.append(f"    {col['name']} {col_type}{pk_marker}")
                 
                 schema += ",\n".join(col_defs)
@@ -126,6 +127,39 @@ class SpiderFormatBot:
                 print(f"⚠️  {table}: {e}")
         
         return schema
+    
+    def validate_sql(self, sql, question):
+        """WHERE 환각 체크"""
+        
+        sql_upper = sql.upper()
+        
+        # WHERE 있으면
+        if 'WHERE' in sql_upper:
+            # 질문에 조건 키워드 있나?
+            condition_keywords = [
+                'week', 'day', 'month', 'year',
+                'id', 'name', 'type', 'category',
+                'where', 'which', 'that',
+                '=', '>', '<',
+                # 숫자도 체크
+                '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+            ]
+            
+            # "how many missions" 같은 전체 COUNT는 조건 없어야 함
+            total_keywords = ['total', 'all', 'how many', 'count']
+            
+            has_condition_in_question = any(k in question.lower() for k in condition_keywords)
+            is_total_query = any(k in question.lower() for k in total_keywords)
+            
+            if is_total_query and not has_condition_in_question:
+                print("⚠️  WHERE 환각 감지!")
+                print(f"   원본: {sql}")
+                
+                # WHERE 제거
+                sql = sql.split('WHERE')[0].strip()
+                print(f"   수정: {sql}")
+        
+        return sql
     
     def ask(self, project, question):
         
@@ -147,20 +181,22 @@ class SpiderFormatBot:
             
             print(f"\n🎯 테이블: {tables}")
             
-            # Spider 형식 스키마!
             schema = self.get_spider_schema(db, tables)
             
-            print(f"\n📋 Spider 형식 스키마:")
-            print(schema)
+            print(f"\n📋 스키마:")
+            print(schema[:300] + "...\n" if len(schema) > 300 else schema)
             
-            # Spider 형식 프롬프트! (테스트에서 완벽하게 작동한 형식)
-            print("🔄 SQL 생성 (Spider 형식)...")
+            # Spider 형식 + WHERE 경고
+            print("🔄 SQL 생성...")
             
             sql_prompt = PromptTemplate.from_template(
                 """# Given the database schema:
 {schema}
 
 # Question: {question}
+
+# Generate SQL query
+# If question asks for "all" or "total" or "how many", do NOT add WHERE clause unless specifically mentioned
 
 # SQL:
 """
@@ -175,23 +211,24 @@ class SpiderFormatBot:
             
             # 정리
             sql = sql.strip()
-            
-            # "# SQL:" 제거
             if "# SQL:" in sql:
                 sql = sql.split("# SQL:")[-1].strip()
             
-            # 첫 줄만
             sql = sql.split('\n')[0].strip()
-            
-            # 백틱 제거
             sql = sql.replace('```sql', '').replace('```', '').strip()
             
-            # 세미콜론 제거
             if ';' in sql:
                 sql = sql.split(';')[0].strip()
             
-            print(f"\n💾 생성된 SQL:")
+            print(f"\n💾 원본 SQL:")
             print(sql)
+            
+            # WHERE 환각 체크!
+            sql = self.validate_sql(sql, question)
+            
+            if sql.strip() != sql:
+                print(f"\n✅ 최종 SQL:")
+                print(sql)
             
             # 보안
             dangerous = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER']
@@ -199,11 +236,11 @@ class SpiderFormatBot:
                 print("🚫 차단")
                 return None
             
-            # 기본 검증만
+            # 기본 검증
             if not sql.upper().startswith('SELECT'):
-                print("⚠️  SELECT로 시작하지 않음")
+                print("⚠️  SELECT로 시작 안 함")
                 sql = f"SELECT COUNT(*) FROM {tables[0]}"
-                print(f"   → 기본 쿼리 사용: {sql}")
+                print(f"   → 기본: {sql}")
             
             # 실행
             print("\n🔄 실행...")
@@ -213,7 +250,7 @@ class SpiderFormatBot:
             print(f"\n📊 결과:")
             print(result)
             
-            # 간단한 답변
+            # 답변
             if result and result != "[]":
                 try:
                     if '[(' in str(result):
@@ -234,8 +271,6 @@ class SpiderFormatBot:
             
         except Exception as e:
             print(f"\n❌ {e}")
-            import traceback
-            traceback.print_exc()
             return None
 
 # 실행
