@@ -13,8 +13,10 @@ class ValidationService:
             return False, "⚠️  허용되지 않은 SQL 작업"
         
         # 2. 금지된 키워드
+        import re
         for keyword in SECURITY_CONFIG['forbidden_keywords']:
-            if keyword in sql_upper:
+            # \b: 단어 경계 (word boundary)
+            if re.search(rf'\b{keyword}\b', sql_upper.strip()):
                 return False, f"🚫 위험한 SQL: {keyword} 작업 차단"
         
         # 3. SELECT로 시작하는지

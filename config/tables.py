@@ -13,6 +13,7 @@ TABLE_DESCRIPTIONS = {
         'use_cases': [
             'What dashboard actions are available?',
             'Show platform missions',
+            '대시보드 미션이 뭐야?',
             '플랫폼 기본 미션이 뭐야?'
         ]
     },
@@ -69,11 +70,12 @@ TABLE_DESCRIPTIONS = {
             Which missions each project has.
             프로젝트가 등록한 퀘스트. 프로젝트별 미션 목록.
         ''',
-        'keywords': ['project quest', 'project mission', 'registered mission', '프로젝트 퀘스트', '등록 미션'],
+        'keywords': ['project quest', 'project mission', 'registered mission', '프로젝트 퀘스트', '어떤 미션'],
         'use_cases': [
             'What quests do projects have?',
             'Show project missions',
-            '프로젝트가 등록한 퀘스트 뭐야?'
+            '프로젝트가 등록한 퀘스트 뭐야?',
+            '2pic 프로젝트는 어떤 미션을 해?',
         ]
     },
     
@@ -115,6 +117,7 @@ TABLE_PRIORITY = {
     'mission_types': ['fury_mission_configs', 'fury_action_configs'],
     'platform_missions': ['fury_action_configs', 'fury_mission_configs'],
     'project_quests': ['fury_project_missions', 'fury_mission_configs'],
+    'project_missions': ['fury_project_missions', 'fury_mission_configs'],
 }
 
 # 기본 테이블 (fallback)

@@ -155,15 +155,12 @@ Schema:
         """질문 패턴에 따른 우선순위 테이블 반환"""
         question_lower = question.lower()
         
-        # 패턴 매칭
-        if 'project' in question_lower:
-            if 'airdrop' in question_lower:
-                return TABLE_PRIORITY['airdrop_count']
-            return TABLE_PRIORITY['project_count']
+        # 🎯 가장 구체적인 패턴부터 체크!
+        # 1. 특정 프로젝트의 미션 (가장 구체적!)
+        if any(kw in question_lower for kw in ['어떤 미션', 'what mission', 'which quest', 'missions for', 'quests for']):
+            return TABLE_PRIORITY['project_missions']
         
-        if 'user' in question_lower:
-            return TABLE_PRIORITY['user_count']
-        
+        # 2. 미션 관련 (구체적)
         if 'mission' in question_lower:
             if 'type' in question_lower or 'kind' in question_lower or 'category' in question_lower:
                 return TABLE_PRIORITY['mission_types']
@@ -172,4 +169,14 @@ Schema:
             if 'project' in question_lower or 'quest' in question_lower:
                 return TABLE_PRIORITY['project_quests']
         
-        return []
+        # 3. 프로젝트 관련 (일반적)
+        if 'project' in question_lower:
+            if 'airdrop' in question_lower:
+                return TABLE_PRIORITY['airdrop_count']
+            return TABLE_PRIORITY['project_count']
+        
+        # 4. 유저 관련 (일반적)
+        if 'user' in question_lower:
+            return TABLE_PRIORITY['user_count']
+        
+        return []   
