@@ -20,16 +20,6 @@ class SQLService:
             load_in_8bit=MODEL_CONFIG['load_in_8bit']
         )
         
-        pipe = pipeline(
-            "text-generation",
-            model=model,
-            tokenizer=self.tokenizer,
-            max_new_tokens=MODEL_CONFIG['max_new_tokens'],
-            temperature=MODEL_CONFIG['temperature'],
-            return_full_text=False
-        )
-        
-        self.llm = HuggingFacePipeline(pipeline=pipe)
         self.model = model
         
         print("✅ SQLCoder 로드 완료!")
@@ -43,7 +33,13 @@ class SQLService:
             schema=schema
         )
         
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
+        # tokenizer에 명시적으로 문자열만 전달
+        inputs = self.tokenizer(
+            prompt,
+            return_tensors="pt",
+            truncation=True,
+            max_length=2048
+        ).to(self.model.device)
         
         with torch.no_grad():
             outputs = self.model.generate(
