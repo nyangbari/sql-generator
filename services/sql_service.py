@@ -1,7 +1,6 @@
 """SQL Generation Service"""
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-from langchain_huggingface import HuggingFacePipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
 from config.settings import MODEL_CONFIG
 
@@ -12,6 +11,10 @@ class SQLService:
         print("🔄 SQLCoder 로딩...")
         
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_CONFIG['model_id'])
+        
+        # pad_token이 없으면 eos_token으로 설정
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         
         model = AutoModelForCausalLM.from_pretrained(
             MODEL_CONFIG['model_id'],
@@ -33,21 +36,30 @@ class SQLService:
             schema=schema
         )
         
-        # tokenizer에 명시적으로 문자열만 전달
+        # 🎯 핵심: prompt를 명시적으로 str로 변환하고 단일 인자로 전달
+        prompt_text = str(prompt).strip()
+        
+        # tokenizer 호출 (최신 버전 호환)
         inputs = self.tokenizer(
-            prompt,
+            prompt_text,  # ← str 보장
             return_tensors="pt",
+            padding=True,
             truncation=True,
-            max_length=2048
-        ).to(self.model.device)
+            max_length=2048,
+            return_attention_mask=True
+        )
+        
+        # GPU로 이동
+        inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
         
         with torch.no_grad():
             outputs = self.model.generate(
-                **inputs,
+                input_ids=inputs['input_ids'],
+                attention_mask=inputs['attention_mask'],
                 max_new_tokens=MODEL_CONFIG['max_new_tokens'],
                 temperature=MODEL_CONFIG['temperature'],
                 do_sample=True,
-                pad_token_id=self.tokenizer.eos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id,
                 eos_token_id=self.tokenizer.eos_token_id
             )
         
