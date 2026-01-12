@@ -1,19 +1,36 @@
 """RAG (Retrieval-Augmented Generation) Service"""
-from langchain_huggingface import HuggingFaceEmbeddings
+from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from sqlalchemy import inspect
 from langchain_community.utilities.sql_database import SQLDatabase
 from config.tables import TABLE_DESCRIPTIONS, TABLE_PRIORITY
 from config.settings import RAG_CONFIG
+from typing import List
+
+class DirectEmbeddings(Embeddings):
+    """sentence-transformers 직접 사용 (최신 버전 호환)"""
+    
+    def __init__(self, model_name: str):
+        self.model = SentenceTransformer(model_name)
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """여러 문서 임베딩"""
+        embeddings = self.model.encode(texts, convert_to_tensor=False)
+        return embeddings.tolist()
+    
+    def embed_query(self, text: str) -> List[float]:
+        """단일 쿼리 임베딩"""
+        embedding = self.model.encode([text], convert_to_tensor=False)
+        return embedding[0].tolist()
 
 class RAGService:
     """RAG 검색 서비스"""
     
     def __init__(self):
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=RAG_CONFIG['embedding_model']
-        )
+        # 직접 sentence-transformers 사용 (최신 버전 호환!)
+        self.embeddings = DirectEmbeddings(RAG_CONFIG['embedding_model'])
         self.vector_stores = {}
         self.table_cache = {}
     
@@ -70,15 +87,20 @@ Schema:
                     print(f"      ⚠️  {table}: {e}")
             
             # 벡터 스토어 생성
-            vector_store = FAISS.from_documents(documents, self.embeddings)
-            
-            self.vector_stores[project_name] = vector_store
-            self.table_cache[project_name] = table_info
-            
-            print(f"      ✅ {len(documents)}개 테이블 인덱싱 완료!")
+            if documents:
+                vector_store = FAISS.from_documents(documents, self.embeddings)
+                
+                self.vector_stores[project_name] = vector_store
+                self.table_cache[project_name] = table_info
+                
+                print(f"      ✅ {len(documents)}개 테이블 인덱싱 완료!")
+            else:
+                print(f"      ⚠️  인덱싱할 테이블 없음")
             
         except Exception as e:
             print(f"      ❌ {project_name} RAG 구축 실패: {e}")
+            import traceback
+            traceback.print_exc()
     
     def search(self, project_name, question, k=None):
         """질문에 관련된 테이블 검색"""
@@ -88,12 +110,16 @@ Schema:
         if project_name not in self.vector_stores:
             return []
         
-        # 우선순위 테이블 체크
+        # 우선순위 테이블 체크 (가장 구체적 → 일반적 순서!)
         priority_tables = self._check_priority_tables(question)
         
         # RAG 검색
-        vector_store = self.vector_stores[project_name]
-        docs = vector_store.similarity_search(question, k=k+2)
+        try:
+            vector_store = self.vector_stores[project_name]
+            docs = vector_store.similarity_search(question, k=k+2)
+        except Exception as e:
+            print(f"⚠️  RAG 검색 실패: {e}")
+            docs = []
         
         tables = []
         
@@ -152,31 +178,33 @@ Schema:
         return f"Table containing {table.replace('fury_', '').replace('_', ' ')} related data"
     
     def _check_priority_tables(self, question):
-        """질문 패턴에 따른 우선순위 테이블 반환"""
+        """질문 패턴에 따른 우선순위 테이블 반환
+        
+        🎯 중요: 구체적인 패턴부터 체크!
+        """
         question_lower = question.lower()
         
-        # 🎯 가장 구체적인 패턴부터 체크!
-        # 1. 특정 프로젝트의 미션 (가장 구체적!)
+        # 1. 가장 구체적: 특정 프로젝트의 미션
         if any(kw in question_lower for kw in ['어떤 미션', 'what mission', 'which quest', 'missions for', 'quests for']):
-            return TABLE_PRIORITY['project_missions']
+            return TABLE_PRIORITY.get('project_missions', [])
         
-        # 2. 미션 관련 (구체적)
+        # 2. 미션 관련
         if 'mission' in question_lower:
             if 'type' in question_lower or 'kind' in question_lower or 'category' in question_lower:
-                return TABLE_PRIORITY['mission_types']
+                return TABLE_PRIORITY.get('mission_types', [])
             if 'dashboard' in question_lower or 'platform' in question_lower:
-                return TABLE_PRIORITY['platform_missions']
+                return TABLE_PRIORITY.get('platform_missions', [])
             if 'project' in question_lower or 'quest' in question_lower:
-                return TABLE_PRIORITY['project_quests']
+                return TABLE_PRIORITY.get('project_quests', [])
         
-        # 3. 프로젝트 관련 (일반적)
+        # 3. 프로젝트 관련
         if 'project' in question_lower:
             if 'airdrop' in question_lower:
-                return TABLE_PRIORITY['airdrop_count']
-            return TABLE_PRIORITY['project_count']
+                return TABLE_PRIORITY.get('airdrop_count', [])
+            return TABLE_PRIORITY.get('project_count', [])
         
-        # 4. 유저 관련 (일반적)
+        # 4. 유저 관련
         if 'user' in question_lower:
-            return TABLE_PRIORITY['user_count']
+            return TABLE_PRIORITY.get('user_count', [])
         
-        return []   
+        return []
