@@ -1,4 +1,4 @@
-"""SQL Generation Service - Clean SQL Extraction"""
+"""SQL Generation Service - Simplified"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -43,30 +43,21 @@ class SQLService:
             
             # 힌트 추가
             if hints:
-                hints_text = "\n\n### IMPORTANT: Use these hints\n"
+                hints_text = "\n\n### Additional Context\n"
                 for hint in hints:
-                    hints_text += f"- {hint}\n"
+                    hints_text += f"{hint}\n"
                 prompt = prompt + hints_text
             
             prompt_text = str(prompt).strip()
             
             # Tokenization
-            try:
-                inputs = self.tokenizer.encode(
-                    prompt_text,
-                    return_tensors="pt",
-                    truncation=True,
-                    max_length=2048,
-                    add_special_tokens=True
-                )
-            except:
-                inputs = self.tokenizer(
-                    [prompt_text],
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True,
-                    max_length=2048
-                )['input_ids']
+            inputs = self.tokenizer.encode(
+                prompt_text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=2048,
+                add_special_tokens=True
+            )
             
             inputs = inputs.to(self.model.device)
             
@@ -77,98 +68,41 @@ class SQLService:
                     temperature=MODEL_CONFIG['temperature'],
                     do_sample=True,
                     pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id,
-                    num_return_sequences=1
+                    eos_token_id=self.tokenizer.eos_token_id
                 )
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            sql = self._extract_sql(result)
+            # 간단한 추출
+            sql = self._simple_extract(result)
             
             return sql
             
         except Exception as e:
-            print(f"\n   ❌ SQL 생성 실패: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"   ❌ 에러: {e}")
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
-    def _extract_sql(self, result):
-        """SQL 추출 - 깨끗하게!"""
-        try:
-            # Answer 섹션 찾기
-            if "### Answer" in result:
-                result = result.split("### Answer")[-1]
-            
-            # 힌트 섹션 제거
-            if "### IMPORTANT" in result:
-                parts = result.split("### IMPORTANT")
-                result = parts[0]  # 힌트 앞부분만
-            
-            # 정규식으로 SELECT 문 추출
-            pattern = r'(SELECT\s+.+?FROM\s+.+?)(?:\n\n|$|```)'
-            matches = re.findall(pattern, result, re.IGNORECASE | re.DOTALL)
-            
-            if matches:
-                sql = matches[-1]
-                sql = self._clean_sql(sql)
-                
-                if sql and 'SELECT' in sql.upper() and 'FROM' in sql.upper():
-                    return sql
-            
-            # Fallback: 수동으로 찾기
-            lines = result.strip().split('\n')
-            sql_lines = []
-            in_sql = False
-            
-            for line in lines:
-                line = line.strip()
-                
-                # 힌트 섹션 스킵
-                if '### IMPORTANT' in line or line.startswith('- '):
-                    continue
-                
-                if line.upper().startswith('SELECT'):
-                    in_sql = True
-                    sql_lines = [line]
-                elif in_sql:
-                    if not line or line.startswith('#') or line.startswith('```'):
-                        break
-                    sql_lines.append(line)
-                    if ';' in line:
-                        break
-            
-            if sql_lines:
-                sql = ' '.join(sql_lines)
-                return self._clean_sql(sql)
-            
-            raise ValueError("No valid SQL found")
-            
-        except Exception as e:
-            print(f"   ⚠️  SQL 추출 실패: {e}")
-            raise
-    
-    def _clean_sql(self, sql):
-        """SQL 정리"""
-        # 코드 블록 제거
-        sql = sql.replace('```sql', '').replace('```', '')
+    def _simple_extract(self, text):
+        """가장 간단한 SQL 추출"""
+        # SELECT로 시작하는 모든 라인 찾기
+        all_selects = re.findall(
+            r'SELECT\s+.+?(?:;|\n\n|\Z)',
+            text,
+            re.IGNORECASE | re.DOTALL
+        )
         
-        # 세미콜론 제거
-        if ';' in sql:
-            sql = sql.split(';')[0]
+        if not all_selects:
+            raise ValueError("No SELECT found")
         
-        # 여러 줄 → 한 줄
+        # 마지막 SELECT 사용
+        sql = all_selects[-1]
+        
+        # 정리
+        sql = sql.replace(';', '').strip()
         sql = re.sub(r'\s+', ' ', sql)
         
-        # 앞뒤 공백
-        sql = sql.strip()
-        
-        # 힌트 텍스트 제거 (만약 남아있으면)
-        if '### IMPORTANT' in sql:
-            sql = sql.split('### IMPORTANT')[0].strip()
-        
-        if '- Use' in sql:
-            lines = sql.split('\n')
-            sql = '\n'.join([l for l in lines if not l.strip().startswith('- ')])
+        # 검증
+        if 'FROM' not in sql.upper():
+            raise ValueError("No FROM clause")
         
         return sql
