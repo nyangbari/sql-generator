@@ -1,4 +1,4 @@
-"""SQL Generation Service - Enhanced Debugging"""
+"""SQL Generation Service - Fixed SQL Extraction"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -31,32 +31,23 @@ class SQLService:
         print("✅ SQLCoder 로드 완료!")
     
     def generate(self, question, tables, hints=None):
-        """SQL 생성 - 힌트 지원 + 디버깅"""
+        """SQL 생성"""
         try:
             schema = "\n\n".join([t["schema"] for t in tables])
             
-            # 기본 프롬프트
             prompt = SQL_GENERATION_PROMPT.format(
                 question=question,
                 schema=schema
             )
             
-            # 힌트 추가 (강조!)
+            # 힌트 추가
             if hints:
                 hints_text = "\n\n### IMPORTANT: Use these hints\n"
                 for hint in hints:
                     hints_text += f"- {hint}\n"
-                hints_text += "\n"
                 prompt = prompt + hints_text
-                
-                print(f"\n   📌 힌트 적용됨: {len(hints)}개")
             
             prompt_text = str(prompt).strip()
-            
-            # 디버깅: 프롬프트 일부 출력
-            if hints:
-                print(f"   📝 프롬프트 마지막 200자:")
-                print(f"   {prompt_text[-200:]}")
             
             # Tokenization
             try:
@@ -67,8 +58,7 @@ class SQLService:
                     max_length=2048,
                     add_special_tokens=True
                 )
-            except Exception as token_err:
-                print(f"   ⚠️  Tokenizer 에러: {token_err}")
+            except:
                 inputs = self.tokenizer(
                     [prompt_text],
                     return_tensors="pt",
@@ -92,18 +82,7 @@ class SQLService:
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # 디버깅: 생성 결과 일부 출력
-            print(f"\n   📄 생성 결과 마지막 300자:")
-            print(f"   {result[-300:]}")
-            
             sql = self._extract_sql(result)
-            
-            # 힌트 검증
-            if hints and 'projectId' in hints[0]:
-                expected_id = hints[0].split("'")[1]  # '2p1c' 추출
-                if expected_id not in sql:
-                    print(f"\n   ⚠️  경고: projectId '{expected_id}'가 SQL에 없음!")
-                    print(f"   생성된 SQL: {sql}")
             
             return sql
             
@@ -111,38 +90,83 @@ class SQLService:
             print(f"\n   ❌ SQL 생성 실패: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Fallback
-            fallback = f"SELECT * FROM {tables[0]['name']} LIMIT 10"
-            print(f"   🔄 Fallback SQL: {fallback}")
-            return fallback
+            return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
     def _extract_sql(self, result):
-        """SQL 추출"""
+        """SQL 추출 - 개선 버전"""
         try:
+            # 방법 1: ```sql 코드 블록
             if "```sql" in result:
                 sql = result.split("```sql")[-1].split("```")[0].strip()
-            else:
+                if sql and sql.upper().startswith('SELECT'):
+                    return self._clean_sql(sql)
+            
+            # 방법 2: ### Answer 이후
+            if "### Answer" in result:
                 after_answer = result.split("### Answer")[-1]
-                lines = after_answer.strip().split('\n')
-                sql_lines = []
-                for line in lines:
-                    line = line.strip()
-                    if line.upper().startswith('SELECT') or sql_lines:
-                        sql_lines.append(line)
-                        if ';' in line:
-                            break
-                sql = '\n'.join(sql_lines).strip()
+                sql = self._find_select_statement(after_answer)
+                if sql:
+                    return self._clean_sql(sql)
             
-            sql = sql.replace('```sql', '').replace('```', '').strip()
-            if ';' in sql:
-                sql = sql.split(';')[0].strip()
+            # 방법 3: 마지막 SELECT 문 찾기
+            sql = self._find_select_statement(result)
+            if sql:
+                return self._clean_sql(sql)
             
-            if not sql or not sql.upper().startswith('SELECT'):
-                raise ValueError("Invalid SQL")
-            
-            return sql
+            raise ValueError("No valid SQL found")
             
         except Exception as e:
             print(f"   ⚠️  SQL 추출 실패: {e}")
+            print(f"   결과 길이: {len(result)}")
+            print(f"   마지막 500자: {result[-500:]}")
             raise
+    
+    def _find_select_statement(self, text):
+        """텍스트에서 SELECT 문 찾기"""
+        lines = text.strip().split('\n')
+        sql_lines = []
+        found_select = False
+        
+        for line in lines:
+            line = line.strip()
+            
+            # SELECT로 시작
+            if line.upper().startswith('SELECT'):
+                found_select = True
+                sql_lines = [line]
+            
+            # SELECT 이후 계속
+            elif found_select:
+                sql_lines.append(line)
+                
+                # 세미콜론으로 끝
+                if ';' in line:
+                    break
+                
+                # 다음 섹션 시작 (###, ---, etc)
+                if line.startswith('#') or line.startswith('---'):
+                    sql_lines.pop()  # 마지막 줄 제거
+                    break
+        
+        if sql_lines:
+            return '\n'.join(sql_lines)
+        
+        return None
+    
+    def _clean_sql(self, sql):
+        """SQL 정리"""
+        # 코드 블록 제거
+        sql = sql.replace('```sql', '').replace('```', '')
+        
+        # 세미콜론 제거
+        if ';' in sql:
+            sql = sql.split(';')[0]
+        
+        # 앞뒤 공백 제거
+        sql = sql.strip()
+        
+        # 빈 줄 제거
+        lines = [line for line in sql.split('\n') if line.strip()]
+        sql = '\n'.join(lines)
+        
+        return sql
