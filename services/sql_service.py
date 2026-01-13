@@ -1,4 +1,4 @@
-"""SQL Generation Service - Simplified"""
+"""SQL Generation Service - Final Version"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -73,8 +73,8 @@ class SQLService:
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # 간단한 추출
-            sql = self._simple_extract(result)
+            # SQL 추출
+            sql = self._extract_sql(result)
             
             return sql
             
@@ -82,27 +82,35 @@ class SQLService:
             print(f"   ❌ 에러: {e}")
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
-    def _simple_extract(self, text):
-        """가장 간단한 SQL 추출"""
-        # SELECT로 시작하는 모든 라인 찾기
-        all_selects = re.findall(
-            r'SELECT\s+.+?(?:;|\n\n|\Z)',
-            text,
+    def _extract_sql(self, text):
+        """SQL 추출 - 최종 버전"""
+        # 모든 SELECT 문 찾기 (아주 관대하게)
+        pattern = r'SELECT\s+.+?FROM\s+\S+'
+        matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+        
+        if not matches:
+            raise ValueError("No SELECT found")
+        
+        # 가장 긴 매칭 (가장 완전한 SQL일 가능성)
+        sql = max(matches, key=len)
+        
+        # WHERE 절까지 확장
+        sql_start = text.find(sql)
+        remaining = text[sql_start:]
+        
+        # WHERE, JOIN, ORDER BY, LIMIT 등 찾기
+        extended = re.search(
+            r'(SELECT\s+.+?FROM\s+.+?)(?:\n\n|;|```|###)',
+            remaining,
             re.IGNORECASE | re.DOTALL
         )
         
-        if not all_selects:
-            raise ValueError("No SELECT found")
-        
-        # 마지막 SELECT 사용
-        sql = all_selects[-1]
+        if extended:
+            sql = extended.group(1)
         
         # 정리
-        sql = sql.replace(';', '').strip()
+        sql = sql.strip()
         sql = re.sub(r'\s+', ' ', sql)
-        
-        # 검증
-        if 'FROM' not in sql.upper():
-            raise ValueError("No FROM clause")
+        sql = sql.replace(';', '')
         
         return sql
