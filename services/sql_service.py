@@ -1,8 +1,9 @@
-"""SQL Generation Service - Fixed SQL Extraction"""
+"""SQL Generation Service - Maximum Debugging"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
 from config.settings import MODEL_CONFIG
+import re
 
 class SQLService:
     """SQL 생성 서비스"""
@@ -82,7 +83,25 @@ class SQLService:
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
+            # 🔍 전체 결과 저장 (디버깅용)
+            print(f"\n   📄 전체 생성 결과 ({len(result)} chars):")
+            print("   " + "="*70)
+            
+            # 프롬프트 제거하고 답변만 추출
+            if "### Answer" in result:
+                answer_part = result.split("### Answer")[-1]
+                print(f"   [Answer 이후 ({len(answer_part)} chars)]")
+                print(answer_part[:500])
+            else:
+                print("   [마지막 800자]")
+                print(result[-800:])
+            
+            print("   " + "="*70)
+            
             sql = self._extract_sql(result)
+            
+            print(f"\n   ✅ 추출된 SQL:")
+            print(f"   {sql}")
             
             return sql
             
@@ -93,80 +112,93 @@ class SQLService:
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
     def _extract_sql(self, result):
-        """SQL 추출 - 개선 버전"""
+        """SQL 추출 - 강력한 정규식 사용"""
         try:
-            # 방법 1: ```sql 코드 블록
+            # 방법 1: SELECT ... FROM ... 정규식으로 직접 추출
+            pattern = r'SELECT\s+.*?FROM\s+.*?(?:WHERE\s+.*?)?(?:;|\n\n|$)'
+            matches = re.findall(pattern, result, re.IGNORECASE | re.DOTALL)
+            
+            if matches:
+                # 가장 마지막 매칭 (최신 생성)
+                sql = matches[-1]
+                sql = self._clean_sql(sql)
+                
+                if sql and 'SELECT' in sql.upper():
+                    print(f"   [정규식으로 추출 성공]")
+                    return sql
+            
+            # 방법 2: ```sql 블록
             if "```sql" in result:
                 sql = result.split("```sql")[-1].split("```")[0].strip()
                 if sql and sql.upper().startswith('SELECT'):
+                    print(f"   [코드 블록에서 추출]")
                     return self._clean_sql(sql)
             
-            # 방법 2: ### Answer 이후
+            # 방법 3: ### Answer 이후에서 SELECT 찾기
             if "### Answer" in result:
                 after_answer = result.split("### Answer")[-1]
-                sql = self._find_select_statement(after_answer)
+                sql = self._find_select_in_text(after_answer)
                 if sql:
+                    print(f"   [Answer 섹션에서 추출]")
                     return self._clean_sql(sql)
             
-            # 방법 3: 마지막 SELECT 문 찾기
-            sql = self._find_select_statement(result)
+            # 방법 4: 전체 텍스트에서 SELECT 찾기
+            sql = self._find_select_in_text(result)
             if sql:
+                print(f"   [전체 텍스트에서 추출]")
                 return self._clean_sql(sql)
             
             raise ValueError("No valid SQL found")
             
         except Exception as e:
             print(f"   ⚠️  SQL 추출 실패: {e}")
-            print(f"   결과 길이: {len(result)}")
-            print(f"   마지막 500자: {result[-500:]}")
             raise
     
-    def _find_select_statement(self, text):
+    def _find_select_in_text(self, text):
         """텍스트에서 SELECT 문 찾기"""
         lines = text.strip().split('\n')
         sql_lines = []
-        found_select = False
+        in_sql = False
         
         for line in lines:
-            line = line.strip()
+            line_stripped = line.strip()
             
-            # SELECT로 시작
-            if line.upper().startswith('SELECT'):
-                found_select = True
-                sql_lines = [line]
+            # SELECT 발견
+            if line_stripped.upper().startswith('SELECT'):
+                in_sql = True
+                sql_lines = [line_stripped]
+                continue
             
-            # SELECT 이후 계속
-            elif found_select:
-                sql_lines.append(line)
-                
-                # 세미콜론으로 끝
-                if ';' in line:
+            # SQL 중간
+            if in_sql:
+                # 빈 줄이나 새 섹션 시작이면 종료
+                if not line_stripped or line_stripped.startswith('#'):
                     break
                 
-                # 다음 섹션 시작 (###, ---, etc)
-                if line.startswith('#') or line.startswith('---'):
-                    sql_lines.pop()  # 마지막 줄 제거
+                sql_lines.append(line_stripped)
+                
+                # 세미콜론이면 종료
+                if ';' in line_stripped:
                     break
         
         if sql_lines:
-            return '\n'.join(sql_lines)
+            return ' '.join(sql_lines)
         
         return None
     
     def _clean_sql(self, sql):
         """SQL 정리"""
-        # 코드 블록 제거
+        # 코드 블록 마커 제거
         sql = sql.replace('```sql', '').replace('```', '')
         
         # 세미콜론 제거
         if ';' in sql:
             sql = sql.split(';')[0]
         
+        # 여러 공백을 하나로
+        sql = re.sub(r'\s+', ' ', sql)
+        
         # 앞뒤 공백 제거
         sql = sql.strip()
-        
-        # 빈 줄 제거
-        lines = [line for line in sql.split('\n') if line.strip()]
-        sql = '\n'.join(lines)
         
         return sql
