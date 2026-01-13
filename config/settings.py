@@ -23,7 +23,7 @@ MODEL_CONFIG = {
     'model_id': 'defog/sqlcoder-7b-2',
     'device_map': 'auto',
     'load_in_8bit': True,
-    'max_new_tokens': 300,
+    'max_new_tokens': 500,  # ← Changed from 300 to 500
     'temperature': 0.1,
 }
 
