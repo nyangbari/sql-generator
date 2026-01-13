@@ -1,4 +1,4 @@
-"""SQL Generation Service - Force generation"""
+"""SQL Generation Service - Inject hints into schema"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -32,20 +32,20 @@ class SQLService:
         print("✅ SQLCoder 로드 완료!")
     
     def generate(self, question, tables, hints=None):
-        """SQL 생성"""
+        """SQL 생성 - 힌트를 스키마에 직접 삽입!"""
         try:
+            # 힌트를 question에 직접 추가!
+            enhanced_question = question
+            if hints:
+                hint_text = " ".join(hints)
+                enhanced_question = f"{question} ({hint_text})"
+            
             schema = "\n\n".join([t["schema"] for t in tables])
             
             prompt = SQL_GENERATION_PROMPT.format(
-                question=question,
+                question=enhanced_question,  # ← 힌트 포함!
                 schema=schema
             )
-            
-            if hints:
-                hints_text = "\n\n### Additional Context\n"
-                for hint in hints:
-                    hints_text += f"{hint}\n"
-                prompt = prompt + hints_text
             
             prompt_text = str(prompt).strip()
             
@@ -59,12 +59,11 @@ class SQLService:
             
             inputs = inputs.to(self.model.device)
             
-            # Force generation with multiple parameters
             with torch.no_grad():
                 outputs = self.model.generate(
                     inputs,
                     max_new_tokens=MODEL_CONFIG['max_new_tokens'],
-                    min_new_tokens=MODEL_CONFIG.get('min_new_tokens', 50),  # FORCE minimum!
+                    min_new_tokens=MODEL_CONFIG.get('min_new_tokens', 50),
                     temperature=MODEL_CONFIG['temperature'],
                     top_p=MODEL_CONFIG.get('top_p', 0.95),
                     do_sample=True,
@@ -72,14 +71,14 @@ class SQLService:
                     eos_token_id=self.tokenizer.eos_token_id,
                     num_beams=1,
                     early_stopping=False,
-                    repetition_penalty=1.1  # Prevent repetition
+                    repetition_penalty=1.1
                 )
             
             print(f"   📊 Generated {outputs.shape[1] - inputs.shape[1]} new tokens")
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Extract NEW content only
+            # Extract NEW content
             if result.startswith(prompt_text):
                 new_content = result[len(prompt_text):].strip()
             else:

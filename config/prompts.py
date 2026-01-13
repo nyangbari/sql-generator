@@ -7,22 +7,20 @@ Generate a SQL query to answer: {question}
 ### Database Schema
 {schema}
 
-### Instructions
-- Use COUNT(DISTINCT column) for unique counts
-- IMPORTANT: Use projectId column for filtering (NOT projectName)
-- Prefer main tables over subset tables
+### Critical Instructions
+- Use COUNT(DISTINCT) for unique counts
+- ALWAYS filter by projectId when a project is specified
+- Use projectId column for filtering (NOT projectName or teamId)
 - Add LIMIT 100 for SELECT * queries
-- Use proper table aliases
+- Use proper JOIN conditions with aliases
 
 ### Answer
-"""
+SQL query:"""
 
-# 답변 생성 프롬프트
 ANSWER_PROMPT = """Question: {question}
 SQL Result: {result}
 
 Generate a natural language answer in Korean (1-2 sentences):
 """
 
-# 프롬프트 버전
-PROMPT_VERSION = "2.5"
+PROMPT_VERSION = "2.6"
