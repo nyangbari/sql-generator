@@ -24,7 +24,9 @@ MODEL_CONFIG = {
     'device_map': 'auto',
     'load_in_8bit': True,
     'max_new_tokens': 500,
-    'temperature': 0.3,  # ← Changed from 0.1 to 0.3
+    'min_new_tokens': 50,  # ← FORCE at least 50 tokens!
+    'temperature': 0.5,     # ← Higher temperature
+    'top_p': 0.95,         # ← Add nucleus sampling
 }
 
 # RAG settings

@@ -1,4 +1,4 @@
-"""SQL Generation Service - Full Debug"""
+"""SQL Generation Service - Force generation"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -49,8 +49,6 @@ class SQLService:
             
             prompt_text = str(prompt).strip()
             
-            print(f"\n   📏 Prompt length: {len(prompt_text)} chars")
-            
             inputs = self.tokenizer.encode(
                 prompt_text,
                 return_tensors="pt",
@@ -59,71 +57,54 @@ class SQLService:
                 add_special_tokens=True
             )
             
-            print(f"   📊 Input tokens: {inputs.shape[1]}")
-            
             inputs = inputs.to(self.model.device)
             
-            print(f"   🎲 Generating with temperature={MODEL_CONFIG['temperature']}, max_new_tokens={MODEL_CONFIG['max_new_tokens']}...")
-            
+            # Force generation with multiple parameters
             with torch.no_grad():
                 outputs = self.model.generate(
                     inputs,
                     max_new_tokens=MODEL_CONFIG['max_new_tokens'],
+                    min_new_tokens=MODEL_CONFIG.get('min_new_tokens', 50),  # FORCE minimum!
                     temperature=MODEL_CONFIG['temperature'],
+                    top_p=MODEL_CONFIG.get('top_p', 0.95),
                     do_sample=True,
                     pad_token_id=self.tokenizer.pad_token_id,
                     eos_token_id=self.tokenizer.eos_token_id,
                     num_beams=1,
-                    early_stopping=False
+                    early_stopping=False,
+                    repetition_penalty=1.1  # Prevent repetition
                 )
             
-            print(f"   📊 Output tokens: {outputs.shape[1]}")
-            print(f"   📈 New tokens generated: {outputs.shape[1] - inputs.shape[1]}")
+            print(f"   📊 Generated {outputs.shape[1] - inputs.shape[1]} new tokens")
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Check if it just repeated the prompt
-            if len(result) - len(prompt_text) < 50:
-                print(f"   ⚠️  WARNING: Model only generated {len(result) - len(prompt_text)} new characters!")
-                print(f"   Prompt ended with: ...{prompt_text[-100:]}")
-                print(f"   Result ended with: ...{result[-100:]}")
-            
-            # Extract only NEW content
+            # Extract NEW content only
             if result.startswith(prompt_text):
                 new_content = result[len(prompt_text):].strip()
-                print(f"\n   ✨ NEW CONTENT ({len(new_content)} chars):")
-                print("   " + "="*60)
-                print(new_content[:500])
-                print("   " + "="*60)
             else:
                 new_content = result
             
-            # Try to extract SQL from new content
+            print(f"   ✨ NEW: {new_content[:200]}...")
+            
             sql = self._extract_sql(new_content if new_content else result)
             
             return sql
             
         except Exception as e:
-            print(f"\n   ❌ Error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"   ❌ Error: {e}")
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
     def _extract_sql(self, text):
         """SQL 추출"""
-        # Look for SELECT ... FROM pattern
         pattern = r'SELECT.+?FROM.+?(?:WHERE.+?)?(?:;|\n\n|$)'
         matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
         
         if not matches:
-            print(f"   ⚠️  No SELECT...FROM pattern found")
-            print(f"   Text to search: {text[:200]}")
             raise ValueError("No SELECT found")
         
         sql = max(matches, key=len)
         sql = sql.replace(';', '').strip()
         sql = re.sub(r'\s+', ' ', sql)
-        
-        print(f"   ✅ Extracted: {sql[:100]}...")
         
         return sql
