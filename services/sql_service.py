@@ -1,4 +1,4 @@
-"""SQL Generation Service - With Hints Support"""
+"""SQL Generation Service - Enhanced Debugging"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -31,7 +31,7 @@ class SQLService:
         print("✅ SQLCoder 로드 완료!")
     
     def generate(self, question, tables, hints=None):
-        """SQL 생성 - 힌트 지원"""
+        """SQL 생성 - 힌트 지원 + 디버깅"""
         try:
             schema = "\n\n".join([t["schema"] for t in tables])
             
@@ -41,12 +41,22 @@ class SQLService:
                 schema=schema
             )
             
-            # 힌트 추가
+            # 힌트 추가 (강조!)
             if hints:
-                hints_text = "\n### Additional Hints\n" + "\n".join(f"- {h}" for h in hints)
+                hints_text = "\n\n### IMPORTANT: Use these hints\n"
+                for hint in hints:
+                    hints_text += f"- {hint}\n"
+                hints_text += "\n"
                 prompt = prompt + hints_text
+                
+                print(f"\n   📌 힌트 적용됨: {len(hints)}개")
             
             prompt_text = str(prompt).strip()
+            
+            # 디버깅: 프롬프트 일부 출력
+            if hints:
+                print(f"   📝 프롬프트 마지막 200자:")
+                print(f"   {prompt_text[-200:]}")
             
             # Tokenization
             try:
@@ -57,7 +67,8 @@ class SQLService:
                     max_length=2048,
                     add_special_tokens=True
                 )
-            except:
+            except Exception as token_err:
+                print(f"   ⚠️  Tokenizer 에러: {token_err}")
                 inputs = self.tokenizer(
                     [prompt_text],
                     return_tensors="pt",
@@ -80,15 +91,31 @@ class SQLService:
                 )
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            # 디버깅: 생성 결과 일부 출력
+            print(f"\n   📄 생성 결과 마지막 300자:")
+            print(f"   {result[-300:]}")
+            
             sql = self._extract_sql(result)
+            
+            # 힌트 검증
+            if hints and 'projectId' in hints[0]:
+                expected_id = hints[0].split("'")[1]  # '2p1c' 추출
+                if expected_id not in sql:
+                    print(f"\n   ⚠️  경고: projectId '{expected_id}'가 SQL에 없음!")
+                    print(f"   생성된 SQL: {sql}")
             
             return sql
             
         except Exception as e:
-            print(f"❌ SQL 생성 실패: {e}")
+            print(f"\n   ❌ SQL 생성 실패: {e}")
             import traceback
             traceback.print_exc()
-            return f"SELECT * FROM {tables[0]['name'] if tables else 'fury_projects'} LIMIT 10"
+            
+            # Fallback
+            fallback = f"SELECT * FROM {tables[0]['name']} LIMIT 10"
+            print(f"   🔄 Fallback SQL: {fallback}")
+            return fallback
     
     def _extract_sql(self, result):
         """SQL 추출"""
@@ -116,5 +143,6 @@ class SQLService:
             
             return sql
             
-        except:
-            return "SELECT * FROM fury_projects LIMIT 10"
+        except Exception as e:
+            print(f"   ⚠️  SQL 추출 실패: {e}")
+            raise
