@@ -1,4 +1,4 @@
-"""SQL Generation Service - Debug Version"""
+"""SQL Generation Service - Full Debug"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -49,6 +49,8 @@ class SQLService:
             
             prompt_text = str(prompt).strip()
             
+            print(f"\n   📏 Prompt length: {len(prompt_text)} chars")
+            
             inputs = self.tokenizer.encode(
                 prompt_text,
                 return_tensors="pt",
@@ -57,7 +59,11 @@ class SQLService:
                 add_special_tokens=True
             )
             
+            print(f"   📊 Input tokens: {inputs.shape[1]}")
+            
             inputs = inputs.to(self.model.device)
+            
+            print(f"   🎲 Generating with temperature={MODEL_CONFIG['temperature']}, max_new_tokens={MODEL_CONFIG['max_new_tokens']}...")
             
             with torch.no_grad():
                 outputs = self.model.generate(
@@ -66,74 +72,58 @@ class SQLService:
                     temperature=MODEL_CONFIG['temperature'],
                     do_sample=True,
                     pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    num_beams=1,
+                    early_stopping=False
                 )
+            
+            print(f"   📊 Output tokens: {outputs.shape[1]}")
+            print(f"   📈 New tokens generated: {outputs.shape[1] - inputs.shape[1]}")
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # 🔍 디버깅 출력
-            print(f"\n   📄 생성 결과 길이: {len(result)} chars")
+            # Check if it just repeated the prompt
+            if len(result) - len(prompt_text) < 50:
+                print(f"   ⚠️  WARNING: Model only generated {len(result) - len(prompt_text)} new characters!")
+                print(f"   Prompt ended with: ...{prompt_text[-100:]}")
+                print(f"   Result ended with: ...{result[-100:]}")
             
-            # Answer 섹션 찾기
-            if "### Answer" in result:
-                answer_part = result.split("### Answer")[-1]
-                print(f"   📝 Answer 섹션 ({len(answer_part)} chars):")
+            # Extract only NEW content
+            if result.startswith(prompt_text):
+                new_content = result[len(prompt_text):].strip()
+                print(f"\n   ✨ NEW CONTENT ({len(new_content)} chars):")
                 print("   " + "="*60)
-                print(answer_part[:800])  # 앞부분 800자
+                print(new_content[:500])
                 print("   " + "="*60)
             else:
-                print(f"   📝 전체 결과 마지막 800자:")
-                print("   " + "="*60)
-                print(result[-800:])
-                print("   " + "="*60)
+                new_content = result
             
-            # SQL 추출
-            sql = self._extract_sql(result)
+            # Try to extract SQL from new content
+            sql = self._extract_sql(new_content if new_content else result)
             
             return sql
             
         except Exception as e:
-            print(f"\n   ❌ 에러: {e}")
+            print(f"\n   ❌ Error: {e}")
             import traceback
             traceback.print_exc()
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
     def _extract_sql(self, text):
         """SQL 추출"""
-        # Answer 섹션만 사용
-        if "### Answer" in text:
-            text = text.split("### Answer")[-1]
-        
-        # SELECT 찾기 (대소문자 무관, 공백 관대)
-        pattern = r'SELECT.+?FROM.+?(?:WHERE.+?)?(?:;|\n\n|```|$)'
+        # Look for SELECT ... FROM pattern
+        pattern = r'SELECT.+?FROM.+?(?:WHERE.+?)?(?:;|\n\n|$)'
         matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
         
-        print(f"\n   🔍 정규식 매칭: {len(matches)}개")
-        
-        if matches:
-            for i, m in enumerate(matches):
-                clean = re.sub(r'\s+', ' ', m[:100])
-                print(f"      {i+1}. {clean}...")
-        
         if not matches:
-            # Fallback: 수동 검색
-            print(f"   ⚠️  정규식 실패, 수동 검색...")
-            
-            lines = text.split('\n')
-            for i, line in enumerate(lines):
-                if 'SELECT' in line.upper():
-                    print(f"      Line {i}: {line[:80]}")
-            
+            print(f"   ⚠️  No SELECT...FROM pattern found")
+            print(f"   Text to search: {text[:200]}")
             raise ValueError("No SELECT found")
         
-        # 가장 긴 매칭
         sql = max(matches, key=len)
-        
-        # 정리
         sql = sql.replace(';', '').strip()
-        sql = sql.split('```')[0]  # 코드 블록 종료 제거
         sql = re.sub(r'\s+', ' ', sql)
         
-        print(f"   ✅ 추출 성공: {sql[:80]}...")
+        print(f"   ✅ Extracted: {sql[:100]}...")
         
         return sql
