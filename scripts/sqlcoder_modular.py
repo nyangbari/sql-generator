@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Modular SQLCoder Bot with Query Preprocessing"""
+"""Modular SQLCoder Bot with Better Formatting"""
 
 import sys
 import os
@@ -62,16 +62,11 @@ class ModularSQLBot:
                 for key, value in preprocessed['entities'].items():
                     if key == 'project':
                         print(f"      project: {value['projectId']} ({value.get('displayTeamName', 'N/A')})")
-                    elif key != 'project_candidates':
-                        print(f"      {key}: {value}")
             
             if preprocessed['hints']:
                 print(f"   SQL 힌트:")
                 for hint in preprocessed['hints']:
                     print(f"      - {hint}")
-            
-            if preprocessed['ambiguous']:
-                print(f"   ⚠️  여러 프로젝트 매칭됨")
             
             # Step 1: RAG 검색
             print("\n🔍 Step 1: RAG 검색...")
@@ -83,7 +78,7 @@ class ModularSQLBot:
             
             print(f"   찾은 테이블: {[t['name'] for t in tables]}")
             
-            # Step 2: SQL 생성 (힌트 포함!)
+            # Step 2: SQL 생성
             print("\n🔄 Step 2: SQL 생성...")
             sql = self.sql.generate(question, tables, hints=preprocessed.get('hints'))
             
@@ -103,21 +98,20 @@ class ModularSQLBot:
             result = db.run(sql)
             
             print(f"\n📊 결과:")
-            print(result)
             
-            # Step 5: 답변
-            answer = self._format_answer(result, preprocessed.get('entities'))
+            # 포맷팅된 결과 출력
+            formatted = self._format_result(result, sql, preprocessed.get('entities'))
+            print(formatted)
             
             print("\n" + "="*70)
-            print(f"💡 {answer}")
+            print(f"💡 {self._format_answer(result, preprocessed.get('entities'))}")
             print("="*70)
             
             return {
                 "tables": [t['name'] for t in tables],
                 "sql": sql,
                 "result": result,
-                "answer": answer,
-                "entities": preprocessed.get('entities')
+                "formatted": formatted
             }
             
         except Exception as e:
@@ -126,8 +120,51 @@ class ModularSQLBot:
             traceback.print_exc()
             return None
     
+    def _format_result(self, result, sql, entities=None):
+        """결과 포맷팅 - 읽기 쉽게!"""
+        if not result or result == "[]":
+            return "결과 없음"
+        
+        try:
+            # COUNT 쿼리
+            if 'COUNT' in sql.upper():
+                import re
+                matches = re.findall(r'\[\((\d+)[,\)]', str(result))
+                if matches:
+                    count = matches[0]
+                    entity_name = ""
+                    if entities and 'project' in entities:
+                        entity_name = f" ({entities['project'].get('displayTeamName', '')})"
+                    return f"총 {count}개{entity_name}"
+            
+            # 리스트 결과
+            if result.startswith('['):
+                import ast
+                data = ast.literal_eval(result)
+                
+                if len(data) == 0:
+                    return "결과 없음"
+                
+                # 5개만 표시
+                display_count = min(5, len(data))
+                lines = [f"\n총 {len(data)}개 (처음 {display_count}개 표시):"]
+                lines.append("-" * 60)
+                
+                for i, row in enumerate(data[:display_count], 1):
+                    lines.append(f"{i}. {row}")
+                
+                if len(data) > 5:
+                    lines.append(f"... (나머지 {len(data)-5}개)")
+                
+                return "\n".join(lines)
+            
+            return str(result)
+            
+        except:
+            return str(result)
+    
     def _format_answer(self, result, entities=None):
-        """결과 포맷팅"""
+        """간단한 답변"""
         if not result or result == "[]":
             return "결과 없음"
         
@@ -137,12 +174,19 @@ class ModularSQLBot:
                 name = entities['project'].get('displayTeamName') or entities['project'].get('projectName')
                 prefix = f"'{name}': "
             
+            # COUNT 결과
             if '[(' in str(result):
-                num = str(result).split('(')[1].split(',')[0].strip()
-                if result.count('(') > 1:
-                    return f"{prefix}결과:\n{result}"
-                else:
-                    return f"{prefix}{num}개"
+                import re
+                matches = re.findall(r'\[\((\d+)[,\)]', str(result))
+                if matches and result.count('(') == 1:
+                    return f"{prefix}{matches[0]}개"
+            
+            # 리스트 결과
+            if result.startswith('['):
+                import ast
+                data = ast.literal_eval(result)
+                return f"{prefix}{len(data)}개의 결과"
+            
             return str(result)
         except:
             return str(result)
