@@ -1,4 +1,4 @@
-"""SQL Generation Service - Ultra Safe Version"""
+"""SQL Generation Service - With Hints Support"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -15,7 +15,6 @@ class SQLService:
             trust_remote_code=True
         )
         
-        # pad_token 설정
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
@@ -29,29 +28,27 @@ class SQLService:
         )
         
         self.model = model
-        
         print("✅ SQLCoder 로드 완료!")
     
-    def generate(self, question, tables):
-        """SQL 생성 - 초안전 버전"""
+    def generate(self, question, tables, hints=None):
+        """SQL 생성 - 힌트 지원"""
         try:
             schema = "\n\n".join([t["schema"] for t in tables])
             
+            # 기본 프롬프트
             prompt = SQL_GENERATION_PROMPT.format(
                 question=question,
                 schema=schema
             )
             
-            # 🎯 핵심: 완전히 안전한 문자열 변환
-            if isinstance(prompt, str):
-                prompt_text = prompt
-            else:
-                prompt_text = str(prompt)
+            # 힌트 추가
+            if hints:
+                hints_text = "\n### Additional Hints\n" + "\n".join(f"- {h}" for h in hints)
+                prompt = prompt + hints_text
             
-            # 추가 정리
-            prompt_text = prompt_text.strip()
+            prompt_text = str(prompt).strip()
             
-            # Tokenization (최대한 안전하게)
+            # Tokenization
             try:
                 inputs = self.tokenizer.encode(
                     prompt_text,
@@ -60,23 +57,17 @@ class SQLService:
                     max_length=2048,
                     add_special_tokens=True
                 )
-            except Exception as e:
-                print(f"⚠️  Tokenizer 에러: {e}")
-                print(f"📝 Prompt 타입: {type(prompt_text)}")
-                print(f"📝 Prompt 길이: {len(prompt_text)}")
-                # Fallback: 더 간단한 방법
+            except:
                 inputs = self.tokenizer(
-                    [prompt_text],  # 리스트로 감싸기
+                    [prompt_text],
                     return_tensors="pt",
                     padding=True,
                     truncation=True,
                     max_length=2048
                 )['input_ids']
             
-            # GPU로 이동
             inputs = inputs.to(self.model.device)
             
-            # 생성
             with torch.no_grad():
                 outputs = self.model.generate(
                     inputs,
@@ -88,10 +79,7 @@ class SQLService:
                     num_return_sequences=1
                 )
             
-            # Decode
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
-            # SQL 추출
             sql = self._extract_sql(result)
             
             return sql
@@ -100,12 +88,10 @@ class SQLService:
             print(f"❌ SQL 생성 실패: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Fallback SQL
             return f"SELECT * FROM {tables[0]['name'] if tables else 'fury_projects'} LIMIT 10"
     
     def _extract_sql(self, result):
-        """생성 결과에서 SQL 추출"""
+        """SQL 추출"""
         try:
             if "```sql" in result:
                 sql = result.split("```sql")[-1].split("```")[0].strip()
@@ -121,7 +107,6 @@ class SQLService:
                             break
                 sql = '\n'.join(sql_lines).strip()
             
-            # 정리
             sql = sql.replace('```sql', '').replace('```', '').strip()
             if ';' in sql:
                 sql = sql.split(';')[0].strip()
@@ -131,6 +116,5 @@ class SQLService:
             
             return sql
             
-        except Exception as e:
-            print(f"⚠️  SQL 추출 실패: {e}")
+        except:
             return "SELECT * FROM fury_projects LIMIT 10"
