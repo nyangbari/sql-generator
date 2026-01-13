@@ -1,4 +1,4 @@
-"""SQL Generation Service - Final Version"""
+"""SQL Generation Service - Debug Version"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT
@@ -41,7 +41,6 @@ class SQLService:
                 schema=schema
             )
             
-            # 힌트 추가
             if hints:
                 hints_text = "\n\n### Additional Context\n"
                 for hint in hints:
@@ -50,7 +49,6 @@ class SQLService:
             
             prompt_text = str(prompt).strip()
             
-            # Tokenization
             inputs = self.tokenizer.encode(
                 prompt_text,
                 return_tensors="pt",
@@ -73,44 +71,69 @@ class SQLService:
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
+            # 🔍 디버깅 출력
+            print(f"\n   📄 생성 결과 길이: {len(result)} chars")
+            
+            # Answer 섹션 찾기
+            if "### Answer" in result:
+                answer_part = result.split("### Answer")[-1]
+                print(f"   📝 Answer 섹션 ({len(answer_part)} chars):")
+                print("   " + "="*60)
+                print(answer_part[:800])  # 앞부분 800자
+                print("   " + "="*60)
+            else:
+                print(f"   📝 전체 결과 마지막 800자:")
+                print("   " + "="*60)
+                print(result[-800:])
+                print("   " + "="*60)
+            
             # SQL 추출
             sql = self._extract_sql(result)
             
             return sql
             
         except Exception as e:
-            print(f"   ❌ 에러: {e}")
+            print(f"\n   ❌ 에러: {e}")
+            import traceback
+            traceback.print_exc()
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
     
     def _extract_sql(self, text):
-        """SQL 추출 - 최종 버전"""
-        # 모든 SELECT 문 찾기 (아주 관대하게)
-        pattern = r'SELECT\s+.+?FROM\s+\S+'
+        """SQL 추출"""
+        # Answer 섹션만 사용
+        if "### Answer" in text:
+            text = text.split("### Answer")[-1]
+        
+        # SELECT 찾기 (대소문자 무관, 공백 관대)
+        pattern = r'SELECT.+?FROM.+?(?:WHERE.+?)?(?:;|\n\n|```|$)'
         matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
         
+        print(f"\n   🔍 정규식 매칭: {len(matches)}개")
+        
+        if matches:
+            for i, m in enumerate(matches):
+                clean = re.sub(r'\s+', ' ', m[:100])
+                print(f"      {i+1}. {clean}...")
+        
         if not matches:
+            # Fallback: 수동 검색
+            print(f"   ⚠️  정규식 실패, 수동 검색...")
+            
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                if 'SELECT' in line.upper():
+                    print(f"      Line {i}: {line[:80]}")
+            
             raise ValueError("No SELECT found")
         
-        # 가장 긴 매칭 (가장 완전한 SQL일 가능성)
+        # 가장 긴 매칭
         sql = max(matches, key=len)
         
-        # WHERE 절까지 확장
-        sql_start = text.find(sql)
-        remaining = text[sql_start:]
-        
-        # WHERE, JOIN, ORDER BY, LIMIT 등 찾기
-        extended = re.search(
-            r'(SELECT\s+.+?FROM\s+.+?)(?:\n\n|;|```|###)',
-            remaining,
-            re.IGNORECASE | re.DOTALL
-        )
-        
-        if extended:
-            sql = extended.group(1)
-        
         # 정리
-        sql = sql.strip()
+        sql = sql.replace(';', '').strip()
+        sql = sql.split('```')[0]  # 코드 블록 종료 제거
         sql = re.sub(r'\s+', ' ', sql)
-        sql = sql.replace(';', '')
+        
+        print(f"   ✅ 추출 성공: {sql[:80]}...")
         
         return sql
