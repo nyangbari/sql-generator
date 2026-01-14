@@ -1,4 +1,4 @@
-"""RAG Service - With DirectEmbeddings for latest sentence-transformers"""
+"""RAG Service - With DirectEmbeddings and improved priority"""
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
@@ -29,7 +29,6 @@ class RAGService:
     """RAG search service"""
     
     def __init__(self):
-        # Use DirectEmbeddings for compatibility!
         self.embeddings = DirectEmbeddings(RAG_CONFIG['embedding_model'])
         self.vector_stores = {}
         self.table_cache = {}
@@ -172,27 +171,42 @@ Schema:
         """Check priority tables based on question pattern"""
         question_lower = question.lower()
         
-        # Most specific: project missions
+        # User count questions - HIGHEST PRIORITY
+        if any(kw in question_lower for kw in ['사용자', 'user', '몇 명', 'how many user']):
+            # Simple total count - just fury_users
+            if any(kw in question_lower for kw in ['총', 'total', '전체', 'all']) or \
+               not any(kw in question_lower for kw in ['project', 'in ', '프로젝트', '에서']):
+                return ['fury_users']
+            # Project-specific - need join table
+            return ['fury_user_project_missions', 'fury_users']
+        
+        # Date/campaign questions
+        if any(kw in question_lower for kw in ['when', 'end', 'start', '언제', '종료', '시작', 'campaign', 'week']):
+            return TABLE_PRIORITY.get('campaign_dates', [])
+        
+        # Mission type questions
+        if ('mission' in question_lower or '미션' in question_lower) and \
+           ('type' in question_lower or 'kind' in question_lower or '종류' in question_lower):
+            return TABLE_PRIORITY.get('mission_types', [])
+        
+        # Specific mission questions
         if any(kw in question_lower for kw in ['어떤 미션', 'what mission', 'which quest', 'missions for', 'quests for', '퀘스트']):
             return TABLE_PRIORITY.get('project_missions', [])
         
-        # Mission related
-        if 'mission' in question_lower or '미션' in question_lower:
-            if 'type' in question_lower or 'kind' in question_lower:
-                return TABLE_PRIORITY.get('mission_types', [])
-            if 'dashboard' in question_lower or 'platform' in question_lower:
-                return TABLE_PRIORITY.get('platform_missions', [])
-            if 'project' in question_lower:
-                return TABLE_PRIORITY.get('project_quests', [])
+        # Platform/dashboard missions
+        if ('mission' in question_lower or '미션' in question_lower) and \
+           ('dashboard' in question_lower or 'platform' in question_lower):
+            return TABLE_PRIORITY.get('platform_missions', [])
         
-        # Project related
+        # Project missions (general)
+        if ('mission' in question_lower or '미션' in question_lower) and \
+           ('project' in question_lower or '프로젝트' in question_lower):
+            return TABLE_PRIORITY.get('project_quests', [])
+        
+        # Project count questions
         if 'project' in question_lower or '프로젝트' in question_lower:
             if 'airdrop' in question_lower:
                 return TABLE_PRIORITY.get('airdrop_count', [])
             return TABLE_PRIORITY.get('project_count', [])
-        
-        # User related
-        if 'user' in question_lower:
-            return TABLE_PRIORITY.get('user_count', [])
         
         return []
