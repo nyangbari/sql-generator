@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Modular SQLCoder Bot with Better Formatting"""
+"""Modular SQLCoder Bot - DB type aware"""
 
 import sys
 import os
@@ -23,13 +23,18 @@ class ModularSQLBot:
         self.validator = ValidationService()
         self.preprocessor = QueryPreprocessor()
         
-        self.databases = {
-            name: config['uri'] 
-            for name, config in DATABASE_CONFIG.items() 
-            if config['uri']
-        }
+        self.databases = {}
+        self.db_types = {}
         
-        print(f"\n📚 프로젝트: {', '.join(self.databases.keys())}")
+        for name, config in DATABASE_CONFIG.items():
+            if config['uri']:
+                self.databases[name] = config['uri']
+                # Detect DB type from URI
+                self.db_types[name] = self._detect_db_type(config['uri'])
+        
+        print(f"\n📚 프로젝트:")
+        for name in self.databases.keys():
+            print(f"   - {name} ({self.db_types[name]})")
         
         print("\n🔄 초기화 중...")
         for name, uri in self.databases.items():
@@ -40,20 +45,37 @@ class ModularSQLBot:
         print("\n✅ 완료!")
         print("="*70)
     
+    def _detect_db_type(self, uri):
+        """Detect database type from URI"""
+        uri_lower = uri.lower()
+        
+        if 'mysql' in uri_lower or 'pymysql' in uri_lower:
+            return "MySQL"
+        elif 'postgres' in uri_lower or 'psycopg' in uri_lower:
+            return "PostgreSQL"
+        elif 'sqlite' in uri_lower:
+            return "SQLite"
+        elif 'mssql' in uri_lower or 'sqlserver' in uri_lower:
+            return "SQL Server"
+        else:
+            return "MySQL"  # Default
+    
     def ask(self, project, question):
         """질문 처리"""
         print("\n" + "="*70)
-        print(f"📂 {project}")
+        print(f"📂 {project} ({self.db_types.get(project, 'Unknown')})")
         print(f"💬 {question}")
         print("="*70)
         
         uri = self.databases.get(project)
+        db_type = self.db_types.get(project, "MySQL")
+        
         if not uri:
             print("❌ 프로젝트 없음")
             return None
         
         try:
-            # Step 0: 질문 전처리
+            # Step 0: Query preprocessing
             print("\n🔍 Step 0: 질문 분석...")
             preprocessed = self.preprocessor.preprocess(project, question)
             
@@ -68,7 +90,7 @@ class ModularSQLBot:
                 for hint in preprocessed['hints']:
                     print(f"      - {hint}")
             
-            # Step 1: RAG 검색
+            # Step 1: RAG search
             print("\n🔍 Step 1: RAG 검색...")
             tables = self.rag.search(project, question)
             
@@ -78,28 +100,32 @@ class ModularSQLBot:
             
             print(f"   찾은 테이블: {[t['name'] for t in tables]}")
             
-            # Step 2: SQL 생성
-            print("\n🔄 Step 2: SQL 생성...")
-            sql = self.sql.generate(question, tables, hints=preprocessed.get('hints'))
+            # Step 2: SQL generation WITH DB TYPE
+            print(f"\n🔄 Step 2: SQL 생성 ({db_type})...")
+            sql = self.sql.generate(
+                question, 
+                tables, 
+                hints=preprocessed.get('hints'),
+                db_type=db_type  # ← Pass DB type!
+            )
             
             print(f"\n💾 생성된 SQL:")
             print(sql)
             
-            # Step 3: 검증
+            # Step 3: Validation
             valid, error = self.validator.validate(sql)
             
             if not valid:
                 print(f"\n{error}")
                 return None
             
-            # Step 4: 실행
+            # Step 4: Execution
             print("\n🔄 Step 3: 실행...")
             db = SQLDatabase.from_uri(uri, sample_rows_in_table_info=0)
             result = db.run(sql)
             
             print(f"\n📊 결과:")
             
-            # 포맷팅된 결과 출력
             formatted = self._format_result(result, sql, preprocessed.get('entities'))
             print(formatted)
             
@@ -126,7 +152,6 @@ class ModularSQLBot:
             return "결과 없음"
         
         try:
-            # GROUP BY with COUNT - show categories with counts
             if 'GROUP BY' in sql.upper() and 'COUNT' in sql.upper():
                 import ast
                 data = ast.literal_eval(result)
@@ -139,14 +164,12 @@ class ModularSQLBot:
                 
                 for i, row in enumerate(data, 1):
                     if isinstance(row, tuple) and len(row) >= 3:
-                        # (category1, category2, count)
                         lines.append(f"{i}. {row[0]} {row[1]}: {row[2]}개")
                     else:
                         lines.append(f"{i}. {row}")
                 
                 return "\n".join(lines)
             
-            # Simple COUNT
             if 'COUNT' in sql.upper() and 'GROUP BY' not in sql.upper():
                 import re
                 matches = re.findall(r'\[\((\d+)[,\)]', str(result))
@@ -157,7 +180,6 @@ class ModularSQLBot:
                         entity_name = f" ({entities['project'].get('displayTeamName', '')})"
                     return f"총 {count}개{entity_name}"
             
-            # List results
             if result.startswith('['):
                 import ast
                 data = ast.literal_eval(result)
@@ -193,7 +215,6 @@ class ModularSQLBot:
                 name = entities['project'].get('displayTeamName') or entities['project'].get('projectName')
                 prefix = f"'{name}': "
             
-            # GROUP BY with COUNT
             if 'GROUP BY' in sql.upper() and 'COUNT' in sql.upper():
                 import ast
                 data = ast.literal_eval(result)
@@ -207,14 +228,12 @@ class ModularSQLBot:
                     
                 return f"{prefix}{total}개 미션 ({', '.join(parts)})"
             
-            # Simple COUNT
             if 'COUNT' in sql.upper():
                 import re
                 matches = re.findall(r'\[\((\d+)[,\)]', str(result))
                 if matches and result.count('(') == 1:
                     return f"{prefix}{matches[0]}개"
             
-            # List
             if result.startswith('['):
                 import ast
                 data = ast.literal_eval(result)
