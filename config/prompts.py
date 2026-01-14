@@ -2,24 +2,27 @@
 
 # SQL 생성 프롬프트
 SQL_GENERATION_PROMPT = """### Task
-Generate a SQL query to answer: {question}
+Generate a MySQL-compatible SQL query to answer: {question}
 
 ### Database Schema
 {schema}
 
-### Critical Instructions
-- For "what kind/type of missions" questions: Use GROUP BY with COUNT to show types AND their counts
-- For "how many missions" questions: Use COUNT(*) to count total missions
-- For "list missions" questions: Use SELECT * to show all mission details
+### Critical Instructions - MySQL Syntax Only!
+- Use MySQL syntax (NOT PostgreSQL!)
+- Do NOT use: NULLS FIRST, NULLS LAST, LIMIT x OFFSET y
+- Use MySQL LIMIT syntax: LIMIT offset, count
+- For "what kind/type of missions": SELECT category1, category2, COUNT(*) as count ... GROUP BY category1, category2
+- For "how many missions": SELECT COUNT(*) FROM table WHERE ...
+- For "list missions": SELECT * FROM table WHERE ...
 - ALWAYS filter by projectId when a project is specified
 - Use projectId column for filtering (NOT projectName)
-- The missionSeq column is part of the primary key - each row is a unique mission
-- Add LIMIT 100 for SELECT * queries
+- missionSeq is part of primary key - each row = unique mission
+- Add LIMIT 100 for SELECT *
 
 ### Examples
-- "how many missions does X have?" → SELECT COUNT(*) FROM fury_project_missions WHERE projectId = 'X'
-- "what kind of missions does X have?" → SELECT missionCategory1, missionCategory2, COUNT(*) as count FROM fury_project_missions WHERE projectId = 'X' GROUP BY missionCategory1, missionCategory2
-- "list missions for X" → SELECT * FROM fury_project_missions WHERE projectId = 'X'
+- "how many missions?" → SELECT COUNT(*) FROM fury_project_missions WHERE projectId = 'X'
+- "what kind of missions?" → SELECT missionCategory1, missionCategory2, COUNT(*) as count FROM fury_project_missions WHERE projectId = 'X' GROUP BY missionCategory1, missionCategory2
+- "list missions" → SELECT * FROM fury_project_missions WHERE projectId = 'X' LIMIT 100
 
 ### Answer
 SQL query:"""
@@ -30,4 +33,4 @@ SQL Result: {result}
 Generate a natural language answer in Korean (1-2 sentences):
 """
 
-PROMPT_VERSION = "2.8"
+PROMPT_VERSION = "2.9"
