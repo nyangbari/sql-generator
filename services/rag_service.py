@@ -1,4 +1,4 @@
-"""RAG Service - With DirectEmbeddings and improved priority"""
+"""RAG Service - Simplified user count logic"""
 from sentence_transformers import SentenceTransformer
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
@@ -103,38 +103,37 @@ Schema:
         # Check priority tables first
         priority_tables = self._check_priority_tables(question)
         
-        # RAG search
+        # If priority tables found, use ONLY those
+        if priority_tables:
+            tables = []
+            for table_name in priority_tables:
+                if table_name in self.table_cache[project_name]:
+                    info = self.table_cache[project_name][table_name]
+                    tables.append({
+                        "name": table_name,
+                        "schema": info["create_statement"]
+                    })
+            
+            if tables:
+                return tables[:k]
+        
+        # Fallback: RAG search
         try:
             vector_store = self.vector_stores[project_name]
-            docs = vector_store.similarity_search(question, k=k+2)
-        except Exception as e:
-            print(f"   ⚠️  RAG 검색 실패: {e}")
-            docs = []
-        
-        tables = []
-        
-        # Add priority tables first
-        for table_name in priority_tables:
-            if table_name in self.table_cache[project_name]:
-                info = self.table_cache[project_name][table_name]
+            docs = vector_store.similarity_search(question, k=k)
+            
+            tables = []
+            for doc in docs:
                 tables.append({
-                    "name": table_name,
-                    "schema": info["create_statement"]
-                })
-        
-        # Add RAG results
-        for doc in docs:
-            table_name = doc.metadata["table"]
-            if table_name not in [t['name'] for t in tables]:
-                tables.append({
-                    "name": table_name,
+                    "name": doc.metadata["table"],
                     "schema": doc.metadata["create_statement"]
                 })
             
-            if len(tables) >= k:
-                break
-        
-        return tables[:k]
+            return tables
+            
+        except Exception as e:
+            print(f"   ⚠️  RAG 검색 실패: {e}")
+            return []
     
     def _build_create_statement(self, table, columns, pk_cols):
         """Build CREATE TABLE statement"""
@@ -168,17 +167,20 @@ Schema:
         return f"Table for {table.replace('fury_', '').replace('_', ' ')}"
     
     def _check_priority_tables(self, question):
-        """Check priority tables based on question pattern"""
+        """Check priority tables - RETURNS EXACTLY WHAT'S NEEDED"""
         question_lower = question.lower()
         
-        # User count questions - HIGHEST PRIORITY
-        if any(kw in question_lower for kw in ['사용자', 'user', '몇 명', 'how many user']):
-            # Simple total count - just fury_users
-            if any(kw in question_lower for kw in ['총', 'total', '전체', 'all']) or \
-               not any(kw in question_lower for kw in ['project', 'in ', '프로젝트', '에서']):
+        # Total user count - ONLY fury_users
+        if any(kw in question_lower for kw in ['사용자', 'user']) and \
+           any(kw in question_lower for kw in ['총', 'total', '몇 명', 'how many', '전체', 'all']):
+            # Check if it's asking for project-specific
+            if any(kw in question_lower for kw in ['project', '프로젝트', 'in ', '에서']) and \
+               not any(kw in question_lower for kw in ['all project', '모든 프로젝트', 'total']):
+                # Project-specific user count
+                return ['fury_user_project_missions']
+            else:
+                # Total platform users - ONLY this table!
                 return ['fury_users']
-            # Project-specific - need join table
-            return ['fury_user_project_missions', 'fury_users']
         
         # Date/campaign questions
         if any(kw in question_lower for kw in ['when', 'end', 'start', '언제', '종료', '시작', 'campaign', 'week']):
@@ -193,17 +195,17 @@ Schema:
         if any(kw in question_lower for kw in ['어떤 미션', 'what mission', 'which quest', 'missions for', 'quests for', '퀘스트']):
             return TABLE_PRIORITY.get('project_missions', [])
         
-        # Platform/dashboard missions
+        # Platform missions
         if ('mission' in question_lower or '미션' in question_lower) and \
            ('dashboard' in question_lower or 'platform' in question_lower):
             return TABLE_PRIORITY.get('platform_missions', [])
         
-        # Project missions (general)
+        # Project missions
         if ('mission' in question_lower or '미션' in question_lower) and \
            ('project' in question_lower or '프로젝트' in question_lower):
             return TABLE_PRIORITY.get('project_quests', [])
         
-        # Project count questions
+        # Project count
         if 'project' in question_lower or '프로젝트' in question_lower:
             if 'airdrop' in question_lower:
                 return TABLE_PRIORITY.get('airdrop_count', [])
