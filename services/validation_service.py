@@ -1,26 +1,39 @@
-"""SQL Validation Service"""
+"""SQL Validation Service - Enhanced"""
 from config.settings import SECURITY_CONFIG
 
 class ValidationService:
     """SQL 검증 서비스"""
     
+    def __init__(self):
+        self.allowed_ops = SECURITY_CONFIG['allowed_operations']
+        self.forbidden = SECURITY_CONFIG['forbidden_keywords']
+        
+        # PostgreSQL-specific syntax not allowed in MySQL
+        self.mysql_forbidden = [
+            'NULLS FIRST',
+            'NULLS LAST',
+            'OFFSET',  # Use LIMIT x, y instead
+            'RETURNING',
+            '::',  # Type casting
+            'ILIKE',
+        ]
+    
     def validate(self, sql):
-        """SQL 보안 검증"""
+        """SQL 검증"""
         sql_upper = sql.upper()
         
-        # 1. 허용된 작업인지
-        if not any(op in sql_upper for op in SECURITY_CONFIG['allowed_operations']):
-            return False, "⚠️  허용되지 않은 SQL 작업"
+        # Check allowed operations
+        if not any(op in sql_upper for op in self.allowed_ops):
+            return False, f"❌ Only {', '.join(self.allowed_ops)} allowed"
         
-        # 2. 금지된 키워드
-        import re
-        for keyword in SECURITY_CONFIG['forbidden_keywords']:
-            # \b: 단어 경계 (word boundary)
-            if re.search(rf'\b{keyword}\b', sql_upper.strip()):
-                return False, f"🚫 위험한 SQL: {keyword} 작업 차단"
+        # Check forbidden keywords
+        for keyword in self.forbidden:
+            if keyword in sql_upper:
+                return False, f"❌ '{keyword}' not allowed"
         
-        # 3. SELECT로 시작하는지
-        if not sql_upper.strip().startswith('SELECT'):
-            return False, "⚠️  SELECT로 시작해야 함"
+        # Check MySQL compatibility
+        for syntax in self.mysql_forbidden:
+            if syntax in sql_upper:
+                return False, f"❌ '{syntax}' is PostgreSQL syntax, not MySQL. Remove it!"
         
         return True, None
