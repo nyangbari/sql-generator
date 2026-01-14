@@ -1,17 +1,17 @@
-"""Query Preprocessor - Project-specific handling"""
+"""Query Preprocessor - DB-level queries"""
 from sqlalchemy import inspect
 from langchain_community.utilities.sql_database import SQLDatabase
 from config.settings import DATABASE_CONFIG
 import re
 
 class QueryPreprocessor:
-    """질문 전처리 및 엔티티 매핑"""
+    """질문 전처리 - 프로젝트 엔티티 매핑 (선택적)"""
     
     def __init__(self):
         self.entity_cache = {}
     
-    def build_entity_cache(self, project_name, db_uri):
-        """DB에서 엔티티 캐시 구축 - 프로젝트별 처리"""
+    def build_entity_cache(self, db_name, db_uri):
+        """DB에서 엔티티 캐시 구축"""
         try:
             db = SQLDatabase.from_uri(db_uri, sample_rows_in_table_info=0)
             inspector = inspect(db._engine)
@@ -19,18 +19,17 @@ class QueryPreprocessor:
             all_tables = inspector.get_table_names()
             
             # knightfury 전용 처리
-            if project_name.lower() == 'knightfury' and 'fury_projects' in all_tables:
-                self._build_knightfury_cache(project_name, db)
+            if db_name.lower() == 'knightfury' and 'fury_projects' in all_tables:
+                self._build_knightfury_cache(db_name, db)
             else:
-                # 다른 프로젝트는 엔티티 캐시 스킵
-                print(f"      ℹ️  엔티티 매핑 스킵 (프로젝트 구조 다름)")
-                self.entity_cache[project_name] = {'projects': {}}
+                print(f"      ℹ️  엔티티 매핑 스킵")
+                self.entity_cache[db_name] = {'projects': {}}
             
         except Exception as e:
             print(f"      ⚠️  엔티티 캐시 구축 실패: {e}")
-            self.entity_cache[project_name] = {'projects': {}}
+            self.entity_cache[db_name] = {'projects': {}}
     
-    def _build_knightfury_cache(self, project_name, db):
+    def _build_knightfury_cache(self, db_name, db):
         """KnightFury 전용 엔티티 캐시"""
         try:
             query = "SELECT projectId, projectName, teamId, displayTeamName FROM fury_projects"
@@ -60,7 +59,7 @@ class QueryPreprocessor:
                             if len(keyword) >= 3:
                                 self._add_mapping(project_map, keyword, project_info)
             
-            self.entity_cache[project_name] = {'projects': project_map}
+            self.entity_cache[db_name] = {'projects': project_map}
             
             unique_projects = len(set(
                 p['projectId'] for p in project_map.values() 
@@ -71,7 +70,7 @@ class QueryPreprocessor:
             
         except Exception as e:
             print(f"      ⚠️  KnightFury 캐시 구축 실패: {e}")
-            self.entity_cache[project_name] = {'projects': {}}
+            self.entity_cache[db_name] = {'projects': {}}
     
     def _add_mapping(self, project_map, key, project_info):
         """매핑 추가"""
@@ -114,9 +113,9 @@ class QueryPreprocessor:
         
         return keywords
     
-    def preprocess(self, project_name, question):
-        """질문 전처리"""
-        if project_name not in self.entity_cache:
+    def preprocess(self, db_name, question):
+        """질문 전처리 - 프로젝트 이름이 질문에 있을 때만 매핑"""
+        if db_name not in self.entity_cache:
             return {
                 'original_question': question,
                 'processed_question': question,
@@ -126,7 +125,7 @@ class QueryPreprocessor:
             }
         
         # 엔티티 캐시가 비어있으면 스킵
-        cache = self.entity_cache[project_name]
+        cache = self.entity_cache[db_name]
         if not cache['projects']:
             return {
                 'original_question': question,
@@ -154,6 +153,16 @@ class QueryPreprocessor:
                     matches.append(project_info)
                     matched_keys.append(key)
         
+        # 프로젝트 이름이 질문에 없으면 힌트 없음
+        if not matches:
+            return {
+                'original_question': question,
+                'processed_question': question,
+                'entities': {},
+                'hints': [],
+                'ambiguous': False
+            }
+        
         # 중복 제거
         unique_matches = {}
         for i, match in enumerate(matches):
@@ -174,7 +183,6 @@ class QueryPreprocessor:
             ambiguous = True
             entities['project_candidates'] = matches
             
-            # 우선순위 매칭
             for match in matches:
                 if match['projectId'].lower() in question_lower:
                     entities['project'] = match
