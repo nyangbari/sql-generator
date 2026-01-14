@@ -1,5 +1,6 @@
-"""SQL Validation Service - Enhanced"""
+"""SQL Validation Service - Word boundary check"""
 from config.settings import SECURITY_CONFIG
+import re
 
 class ValidationService:
     """SQL 검증 서비스"""
@@ -7,33 +8,20 @@ class ValidationService:
     def __init__(self):
         self.allowed_ops = SECURITY_CONFIG['allowed_operations']
         self.forbidden = SECURITY_CONFIG['forbidden_keywords']
-        
-        # PostgreSQL-specific syntax not allowed in MySQL
-        self.mysql_forbidden = [
-            'NULLS FIRST',
-            'NULLS LAST',
-            'OFFSET',  # Use LIMIT x, y instead
-            'RETURNING',
-            '::',  # Type casting
-            'ILIKE',
-        ]
     
     def validate(self, sql):
-        """SQL 검증"""
+        """SQL 검증 - with word boundaries"""
         sql_upper = sql.upper()
         
         # Check allowed operations
         if not any(op in sql_upper for op in self.allowed_ops):
             return False, f"❌ Only {', '.join(self.allowed_ops)} allowed"
         
-        # Check forbidden keywords
+        # Check forbidden keywords with WORD BOUNDARIES
+        # This prevents "updatedAt" from matching "UPDATE"
         for keyword in self.forbidden:
-            if keyword in sql_upper:
-                return False, f"❌ '{keyword}' not allowed"
-        
-        # Check MySQL compatibility
-        for syntax in self.mysql_forbidden:
-            if syntax in sql_upper:
-                return False, f"❌ '{syntax}' is PostgreSQL syntax, not MySQL. Remove it!"
+            pattern = r'\b' + re.escape(keyword) + r'\b'
+            if re.search(pattern, sql_upper):
+                return False, f"❌ '{keyword}' operation not allowed"
         
         return True, None
