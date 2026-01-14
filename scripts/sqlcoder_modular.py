@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Modular SQLCoder Bot - DB type aware"""
+"""Modular SQLCoder Bot - DB-level queries"""
 
 import sys
 import os
@@ -11,7 +11,7 @@ from config import DATABASE_CONFIG
 from services import RAGService, SQLService, ValidationService, QueryPreprocessor
 
 class ModularSQLBot:
-    """모듈형 SQL 봇"""
+    """모듈형 SQL 봇 - DB 레벨 쿼리"""
     
     def __init__(self):
         print("="*70)
@@ -29,10 +29,9 @@ class ModularSQLBot:
         for name, config in DATABASE_CONFIG.items():
             if config['uri']:
                 self.databases[name] = config['uri']
-                # Detect DB type from URI
                 self.db_types[name] = self._detect_db_type(config['uri'])
         
-        print(f"\n📚 프로젝트:")
+        print(f"\n📚 데이터베이스:")
         for name in self.databases.keys():
             print(f"   - {name} ({self.db_types[name]})")
         
@@ -58,26 +57,26 @@ class ModularSQLBot:
         elif 'mssql' in uri_lower or 'sqlserver' in uri_lower:
             return "SQL Server"
         else:
-            return "MySQL"  # Default
+            return "MySQL"
     
-    def ask(self, project, question):
+    def ask(self, db_name, question):
         """질문 처리"""
         print("\n" + "="*70)
-        print(f"📂 {project} ({self.db_types.get(project, 'Unknown')})")
+        print(f"📂 {db_name} ({self.db_types.get(db_name, 'Unknown')})")
         print(f"💬 {question}")
         print("="*70)
         
-        uri = self.databases.get(project)
-        db_type = self.db_types.get(project, "MySQL")
+        uri = self.databases.get(db_name)
+        db_type = self.db_types.get(db_name, "MySQL")
         
         if not uri:
-            print("❌ 프로젝트 없음")
+            print("❌ DB 없음")
             return None
         
         try:
-            # Step 0: Query preprocessing
+            # Step 0: Query preprocessing (optional project detection)
             print("\n🔍 Step 0: 질문 분석...")
-            preprocessed = self.preprocessor.preprocess(project, question)
+            preprocessed = self.preprocessor.preprocess(db_name, question)
             
             if preprocessed['entities']:
                 print(f"   발견된 엔티티:")
@@ -89,10 +88,12 @@ class ModularSQLBot:
                 print(f"   SQL 힌트:")
                 for hint in preprocessed['hints']:
                     print(f"      - {hint}")
+            else:
+                print(f"   전체 DB 조회 (프로젝트 필터 없음)")
             
             # Step 1: RAG search
             print("\n🔍 Step 1: RAG 검색...")
-            tables = self.rag.search(project, question)
+            tables = self.rag.search(db_name, question)
             
             if not tables:
                 print("❌ 관련 테이블 없음")
@@ -100,13 +101,13 @@ class ModularSQLBot:
             
             print(f"   찾은 테이블: {[t['name'] for t in tables]}")
             
-            # Step 2: SQL generation WITH DB TYPE
+            # Step 2: SQL generation
             print(f"\n🔄 Step 2: SQL 생성 ({db_type})...")
             sql = self.sql.generate(
                 question, 
                 tables, 
                 hints=preprocessed.get('hints'),
-                db_type=db_type  # ← Pass DB type!
+                db_type=db_type
             )
             
             print(f"\n💾 생성된 SQL:")
@@ -249,33 +250,35 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         bot.ask(sys.argv[1], sys.argv[2])
     else:
-        projects = list(bot.databases.keys())
+        dbs = list(bot.databases.keys())
         
-        if not projects:
-            print("\n❌ 프로젝트 없음")
+        if not dbs:
+            print("\n❌ DB 없음")
             sys.exit(1)
         
-        print(f"\n📚 프로젝트: {', '.join(projects)}")
-        project = input("선택: ").strip().lower()
+        print(f"\n📚 데이터베이스: {', '.join(dbs)}")
+        db_name = input("선택: ").strip().lower()
         
-        if project not in projects:
-            print(f"❌ '{project}' 없음")
+        if db_name not in dbs:
+            print(f"❌ '{db_name}' 없음")
             sys.exit(1)
         
-        print(f"\n✅ '{project}' 선택")
+        print(f"\n✅ '{db_name}' 선택")
+        print(f"💡 Tip: 특정 프로젝트를 질문에 포함하면 해당 프로젝트만 조회됩니다")
+        print(f"   예: 'SuperWalk 사용자 몇 명?' vs '전체 사용자 몇 명?'")
         print("\n💬 질문 입력 (종료: exit)")
         print("")
         
         while True:
             try:
-                question = input(f"\n[{project}] ").strip()
+                question = input(f"\n[{db_name}] ").strip()
                 
                 if question.lower() in ['exit', 'quit', 'q']:
                     print("\n👋")
                     break
                 
                 if question:
-                    bot.ask(project, question)
+                    bot.ask(db_name, question)
                     
             except KeyboardInterrupt:
                 print("\n\n👋")
