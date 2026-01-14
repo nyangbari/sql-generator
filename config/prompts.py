@@ -31,7 +31,7 @@ IF ONLY fury_users is in schema:
 → "total users?" → SELECT COUNT(*) FROM fury_users (NO JOIN!)
 
 IF fury_user_project_missions is in schema:
-→ "users in project X?" → SELECT COUNT(DISTINCT userId) FROM fury_user_project_missions WHERE projectId = 'X'
+→ "users in project X?" → SELECT COUNT(DISTINCT address) FROM fury_user_project_missions WHERE projectId = 'X'
 
 IF fury_project_missions is in schema:
 → "how many missions in X?" → SELECT COUNT(*) FROM fury_project_missions WHERE projectId = 'X'
