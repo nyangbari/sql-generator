@@ -1,7 +1,7 @@
-"""SQL Generation Service - Inject hints into schema"""
+"""SQL Generation Service - Dynamic DB type detection"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from config.prompts import SQL_GENERATION_PROMPT
+from config.prompts import SQL_GENERATION_PROMPT_TEMPLATE
 from config.settings import MODEL_CONFIG
 import re
 
@@ -31,10 +31,10 @@ class SQLService:
         self.model = model
         print("✅ SQLCoder 로드 완료!")
     
-    def generate(self, question, tables, hints=None):
-        """SQL 생성 - 힌트를 스키마에 직접 삽입!"""
+    def generate(self, question, tables, hints=None, db_type="MySQL"):
+        """SQL 생성 - DB type aware"""
         try:
-            # 힌트를 question에 직접 추가!
+            # Enhance question with hints
             enhanced_question = question
             if hints:
                 hint_text = " ".join(hints)
@@ -42,8 +42,10 @@ class SQLService:
             
             schema = "\n\n".join([t["schema"] for t in tables])
             
-            prompt = SQL_GENERATION_PROMPT.format(
-                question=enhanced_question,  # ← 힌트 포함!
+            # Build prompt with DB type
+            prompt = SQL_GENERATION_PROMPT_TEMPLATE.format(
+                db_type=db_type,
+                question=enhanced_question,
                 schema=schema
             )
             
@@ -78,15 +80,16 @@ class SQLService:
             
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            # Extract NEW content
             if result.startswith(prompt_text):
                 new_content = result[len(prompt_text):].strip()
             else:
                 new_content = result
             
-            print(f"   ✨ NEW: {new_content[:200]}...")
-            
             sql = self._extract_sql(new_content if new_content else result)
+            
+            # Auto-fix based on DB type
+            if db_type.upper() == "MYSQL":
+                sql = self._mysql_fix(sql)
             
             return sql
             
@@ -105,5 +108,25 @@ class SQLService:
         sql = max(matches, key=len)
         sql = sql.replace(';', '').strip()
         sql = re.sub(r'\s+', ' ', sql)
+        
+        return sql
+    
+    def _mysql_fix(self, sql):
+        """PostgreSQL → MySQL auto-fix"""
+        original = sql
+        
+        sql = re.sub(r'\s+NULLS\s+(FIRST|LAST)', '', sql, flags=re.IGNORECASE)
+        
+        offset_match = re.search(r'LIMIT\s+(\d+)\s+OFFSET\s+(\d+)', sql, re.IGNORECASE)
+        if offset_match:
+            limit = offset_match.group(1)
+            offset = offset_match.group(2)
+            sql = re.sub(r'LIMIT\s+\d+\s+OFFSET\s+\d+', f'LIMIT {offset}, {limit}', sql, flags=re.IGNORECASE)
+        
+        sql = re.sub(r'::\w+', '', sql)
+        sql = re.sub(r'\bILIKE\b', 'LIKE', sql, flags=re.IGNORECASE)
+        
+        if sql != original:
+            print(f"   🔧 Auto-fixed for MySQL")
         
         return sql
