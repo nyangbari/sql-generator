@@ -104,7 +104,7 @@ class ModularSQLBot:
             print(formatted)
             
             print("\n" + "="*70)
-            print(f"💡 {self._format_answer(result, preprocessed.get('entities'))}")
+            print(f"💡 {self._format_answer(result, sql, preprocessed.get('entities'))}")
             print("="*70)
             
             return {
@@ -121,13 +121,33 @@ class ModularSQLBot:
             return None
     
     def _format_result(self, result, sql, entities=None):
-        """결과 포맷팅 - 읽기 쉽게!"""
+        """결과 포맷팅"""
         if not result or result == "[]":
             return "결과 없음"
         
         try:
-            # COUNT 쿼리
-            if 'COUNT' in sql.upper():
+            # GROUP BY with COUNT - show categories with counts
+            if 'GROUP BY' in sql.upper() and 'COUNT' in sql.upper():
+                import ast
+                data = ast.literal_eval(result)
+                
+                if len(data) == 0:
+                    return "결과 없음"
+                
+                lines = [f"\n총 {len(data)}개 카테고리, {sum(row[-1] if isinstance(row, tuple) else row for row in data)}개 미션:"]
+                lines.append("-" * 60)
+                
+                for i, row in enumerate(data, 1):
+                    if isinstance(row, tuple) and len(row) >= 3:
+                        # (category1, category2, count)
+                        lines.append(f"{i}. {row[0]} {row[1]}: {row[2]}개")
+                    else:
+                        lines.append(f"{i}. {row}")
+                
+                return "\n".join(lines)
+            
+            # Simple COUNT
+            if 'COUNT' in sql.upper() and 'GROUP BY' not in sql.upper():
                 import re
                 matches = re.findall(r'\[\((\d+)[,\)]', str(result))
                 if matches:
@@ -137,7 +157,7 @@ class ModularSQLBot:
                         entity_name = f" ({entities['project'].get('displayTeamName', '')})"
                     return f"총 {count}개{entity_name}"
             
-            # 리스트 결과
+            # List results
             if result.startswith('['):
                 import ast
                 data = ast.literal_eval(result)
@@ -145,7 +165,6 @@ class ModularSQLBot:
                 if len(data) == 0:
                     return "결과 없음"
                 
-                # 5개만 표시
                 display_count = min(5, len(data))
                 lines = [f"\n총 {len(data)}개 (처음 {display_count}개 표시):"]
                 lines.append("-" * 60)
@@ -163,7 +182,7 @@ class ModularSQLBot:
         except:
             return str(result)
     
-    def _format_answer(self, result, entities=None):
+    def _format_answer(self, result, sql, entities=None):
         """간단한 답변"""
         if not result or result == "[]":
             return "결과 없음"
@@ -174,14 +193,28 @@ class ModularSQLBot:
                 name = entities['project'].get('displayTeamName') or entities['project'].get('projectName')
                 prefix = f"'{name}': "
             
-            # COUNT 결과
-            if '[(' in str(result):
+            # GROUP BY with COUNT
+            if 'GROUP BY' in sql.upper() and 'COUNT' in sql.upper():
+                import ast
+                data = ast.literal_eval(result)
+                
+                parts = []
+                total = 0
+                for row in data:
+                    if isinstance(row, tuple) and len(row) >= 3:
+                        parts.append(f"{row[-1]}개 {row[0]} {row[1]}")
+                        total += row[-1]
+                    
+                return f"{prefix}{total}개 미션 ({', '.join(parts)})"
+            
+            # Simple COUNT
+            if 'COUNT' in sql.upper():
                 import re
                 matches = re.findall(r'\[\((\d+)[,\)]', str(result))
                 if matches and result.count('(') == 1:
                     return f"{prefix}{matches[0]}개"
             
-            # 리스트 결과
+            # List
             if result.startswith('['):
                 import ast
                 data = ast.literal_eval(result)
