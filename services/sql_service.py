@@ -1,7 +1,7 @@
 """SQL Generation Service - Dynamic DB type detection"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from config.prompts import SQL_GENERATION_PROMPT_TEMPLATE
+from config.prompts import SQL_GENERATION_PROMPT_TEMPLATE  # ← Fixed!
 from config.settings import MODEL_CONFIG
 import re
 
@@ -34,7 +34,6 @@ class SQLService:
     def generate(self, question, tables, hints=None, db_type="MySQL"):
         """SQL 생성 - DB type aware"""
         try:
-            # Enhance question with hints
             enhanced_question = question
             if hints:
                 hint_text = " ".join(hints)
@@ -42,7 +41,7 @@ class SQLService:
             
             schema = "\n\n".join([t["schema"] for t in tables])
             
-            # Build prompt with DB type
+            # Use template with db_type
             prompt = SQL_GENERATION_PROMPT_TEMPLATE.format(
                 db_type=db_type,
                 question=enhanced_question,
