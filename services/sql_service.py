@@ -38,18 +38,17 @@ class SQLService:
             if hints:
                 hint_text = " ".join(hints)
                 enhanced_question = f"{question} ({hint_text})"
-            
+
             schema = "\n\n".join([t["schema"] for t in tables])
-            table_names = [t["name"] for t in tables]
-            
+
             prompt = SQL_GENERATION_PROMPT_TEMPLATE.format(
                 db_type=db_type,
                 question=enhanced_question,
                 schema=schema
             )
-            
+
             prompt_text = str(prompt).strip()
-            
+
             inputs = self.tokenizer.encode(
                 prompt_text,
                 return_tensors="pt",
@@ -57,9 +56,9 @@ class SQLService:
                 max_length=2048,
                 add_special_tokens=True
             )
-            
+
             inputs = inputs.to(self.model.device)
-            
+
             with torch.no_grad():
                 outputs = self.model.generate(
                     inputs,
@@ -74,33 +73,24 @@ class SQLService:
                     early_stopping=False,
                     repetition_penalty=1.1
                 )
-            
+
             print(f"   📊 Generated {outputs.shape[1] - inputs.shape[1]} new tokens")
-            
+
             result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-            
+
             if result.startswith(prompt_text):
                 new_content = result[len(prompt_text):].strip()
             else:
                 new_content = result
-            
+
             sql = self._extract_sql(new_content if new_content else result)
-            
-            # Validate: No JOINs to tables not in schema
-            if not self._validate_tables(sql, table_names):
-                print(f"   ⚠️  Invalid SQL: Uses tables not in schema!")
-                print(f"   📋 Available tables: {table_names}")
-                # Fallback to simple query
-                if len(table_names) == 1 and 'fury_users' in table_names:
-                    sql = "SELECT COUNT(*) FROM fury_users"
-                    print(f"   🔧 Using fallback: {sql}")
-            
+
             # Auto-fix MySQL issues
             if db_type.upper() == "MYSQL":
                 sql = self._mysql_fix(sql)
-            
+
             return sql
-            
+
         except Exception as e:
             print(f"   ❌ Error: {e}")
             return f"SELECT * FROM {tables[0]['name']} LIMIT 10"
@@ -109,34 +99,16 @@ class SQLService:
         """SQL 추출"""
         pattern = r'SELECT.+?FROM.+?(?:WHERE.+?)?(?:;|\n\n|$)'
         matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
-        
+
         if not matches:
             raise ValueError("No SELECT found")
-        
+
         sql = max(matches, key=len)
         sql = sql.replace(';', '').strip()
         sql = re.sub(r'\s+', ' ', sql)
-        
+
         return sql
-    
-    def _validate_tables(self, sql, allowed_tables):
-        """Validate SQL only uses allowed tables"""
-        sql_upper = sql.upper()
-        
-        # Extract table names from SQL (after FROM and JOIN)
-        pattern = r'(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)'
-        used_tables = re.findall(pattern, sql_upper, re.IGNORECASE)
-        
-        # Check if all used tables are in allowed list
-        allowed_upper = [t.upper() for t in allowed_tables]
-        
-        for table in used_tables:
-            if table.upper() not in allowed_upper:
-                print(f"   ❌ Table '{table}' not in schema!")
-                return False
-        
-        return True
-    
+
     def _mysql_fix(self, sql):
         """PostgreSQL → MySQL auto-fix"""
         original = sql

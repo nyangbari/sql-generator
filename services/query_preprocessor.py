@@ -11,10 +11,17 @@ class QueryPreprocessor:
         self.entity_cache = {}
         self.platform_names = {'knightfury', 'furyx'}  # Platform DB names
     
-    def build_entity_cache(self, db_name, db_uri):
-        """DB에서 엔티티 캐시 구축"""
+    def build_entity_cache(self, db_name, db=None, db_uri=None):
+        """DB에서 엔티티 캐시 구축
+
+        Args:
+            db_name: DB 이름
+            db: SQLDatabase 객체 (우선 사용)
+            db_uri: DB URI (db가 없으면 이걸로 연결)
+        """
         try:
-            db = SQLDatabase.from_uri(db_uri, sample_rows_in_table_info=0)
+            if db is None:
+                db = SQLDatabase.from_uri(db_uri, sample_rows_in_table_info=0)
             inspector = inspect(db._engine)
             
             all_tables = inspector.get_table_names()

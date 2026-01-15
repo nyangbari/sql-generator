@@ -3,6 +3,8 @@
 
 import sys
 import os
+import ast
+import re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -38,8 +40,10 @@ class ModularSQLBot:
         print("\n🔄 초기화 중...")
         for name, uri in self.databases.items():
             print(f"\n   [{name}]")
-            self.rag.build_index(name, uri)
-            self.preprocessor.build_entity_cache(name, uri)
+            # DB 한 번만 연결해서 공유
+            db = SQLDatabase.from_uri(uri, sample_rows_in_table_info=0)
+            self.rag.build_index(name, db=db)
+            self.preprocessor.build_entity_cache(name, db=db)
         
         print("\n✅ 완료!")
         print("="*70)
@@ -112,13 +116,19 @@ class ModularSQLBot:
             
             print(f"\n💾 생성된 SQL:")
             print(sql)
-            
-            # Step 3: Validation
-            valid, error = self.validator.validate(sql)
-            
+
+            # Step 3: Validation (보안 + 테이블 검증)
+            table_names = [t['name'] for t in tables]
+            valid, error = self.validator.validate(sql, allowed_tables=table_names)
+
             if not valid:
                 print(f"\n{error}")
-                return None
+                # Fallback for user count
+                if 'fury_users' in table_names and len(table_names) == 1:
+                    sql = "SELECT COUNT(*) FROM fury_users"
+                    print(f"   🔧 Using fallback: {sql}")
+                else:
+                    return None
             
             # Step 4: Execution
             print("\n🔄 Step 3: 실행...")
@@ -147,102 +157,123 @@ class ModularSQLBot:
             traceback.print_exc()
             return None
     
+    def _parse_result(self, result, sql):
+        """결과 파싱 - 공통 로직
+
+        Returns:
+            dict: {
+                'type': 'group_count' | 'count' | 'list' | 'raw',
+                'data': parsed data,
+                'count': single count value (for 'count' type),
+                'total': total count (for 'group_count' type)
+            }
+        """
+        if not result or result == "[]":
+            return {'type': 'empty', 'data': None}
+
+        sql_upper = sql.upper()
+
+        # GROUP BY + COUNT
+        if 'GROUP BY' in sql_upper and 'COUNT' in sql_upper:
+            try:
+                data = ast.literal_eval(result)
+                total = sum(row[-1] if isinstance(row, tuple) else row for row in data)
+                return {'type': 'group_count', 'data': data, 'total': total}
+            except:
+                pass
+
+        # Simple COUNT
+        if 'COUNT' in sql_upper and 'GROUP BY' not in sql_upper:
+            matches = re.findall(r'\[\((\d+)[,\)]', str(result))
+            if matches:
+                return {'type': 'count', 'data': None, 'count': int(matches[0])}
+
+        # List result
+        if result.startswith('['):
+            try:
+                data = ast.literal_eval(result)
+                return {'type': 'list', 'data': data}
+            except:
+                pass
+
+        return {'type': 'raw', 'data': result}
+
     def _format_result(self, result, sql, entities=None):
-        """결과 포맷팅"""
-        if not result or result == "[]":
+        """결과 포맷팅 (상세)"""
+        parsed = self._parse_result(result, sql)
+
+        if parsed['type'] == 'empty':
             return "결과 없음"
-        
-        try:
-            if 'GROUP BY' in sql.upper() and 'COUNT' in sql.upper():
-                import ast
-                data = ast.literal_eval(result)
-                
-                if len(data) == 0:
-                    return "결과 없음"
-                
-                lines = [f"\n총 {len(data)}개 카테고리, {sum(row[-1] if isinstance(row, tuple) else row for row in data)}개 미션:"]
-                lines.append("-" * 60)
-                
-                for i, row in enumerate(data, 1):
-                    if isinstance(row, tuple) and len(row) >= 3:
-                        lines.append(f"{i}. {row[0]} {row[1]}: {row[2]}개")
-                    else:
-                        lines.append(f"{i}. {row}")
-                
-                return "\n".join(lines)
-            
-            if 'COUNT' in sql.upper() and 'GROUP BY' not in sql.upper():
-                import re
-                matches = re.findall(r'\[\((\d+)[,\)]', str(result))
-                if matches:
-                    count = matches[0]
-                    entity_name = ""
-                    if entities and 'project' in entities:
-                        entity_name = f" ({entities['project'].get('displayTeamName', '')})"
-                    return f"총 {count}개{entity_name}"
-            
-            if result.startswith('['):
-                import ast
-                data = ast.literal_eval(result)
-                
-                if len(data) == 0:
-                    return "결과 없음"
-                
-                display_count = min(5, len(data))
-                lines = [f"\n총 {len(data)}개 (처음 {display_count}개 표시):"]
-                lines.append("-" * 60)
-                
-                for i, row in enumerate(data[:display_count], 1):
+
+        if parsed['type'] == 'group_count':
+            data = parsed['data']
+            if len(data) == 0:
+                return "결과 없음"
+
+            lines = [f"\n총 {len(data)}개 카테고리, {parsed['total']}개 미션:"]
+            lines.append("-" * 60)
+
+            for i, row in enumerate(data, 1):
+                if isinstance(row, tuple) and len(row) >= 3:
+                    lines.append(f"{i}. {row[0]} {row[1]}: {row[2]}개")
+                else:
                     lines.append(f"{i}. {row}")
-                
-                if len(data) > 5:
-                    lines.append(f"... (나머지 {len(data)-5}개)")
-                
-                return "\n".join(lines)
-            
-            return str(result)
-            
-        except:
-            return str(result)
-    
-    def _format_answer(self, result, sql, entities=None):
-        """간단한 답변"""
-        if not result or result == "[]":
-            return "결과 없음"
-        
-        try:
-            prefix = ""
+
+            return "\n".join(lines)
+
+        if parsed['type'] == 'count':
+            entity_name = ""
             if entities and 'project' in entities:
-                name = entities['project'].get('displayTeamName') or entities['project'].get('projectName')
-                prefix = f"'{name}': "
-            
-            if 'GROUP BY' in sql.upper() and 'COUNT' in sql.upper():
-                import ast
-                data = ast.literal_eval(result)
-                
-                parts = []
-                total = 0
-                for row in data:
-                    if isinstance(row, tuple) and len(row) >= 3:
-                        parts.append(f"{row[-1]}개 {row[0]} {row[1]}")
-                        total += row[-1]
-                    
-                return f"{prefix}{total}개 미션 ({', '.join(parts)})"
-            
-            if 'COUNT' in sql.upper():
-                import re
-                matches = re.findall(r'\[\((\d+)[,\)]', str(result))
-                if matches and result.count('(') == 1:
-                    return f"{prefix}{matches[0]}개"
-            
-            if result.startswith('['):
-                import ast
-                data = ast.literal_eval(result)
-                return f"{prefix}{len(data)}개의 결과"
-            
-            return str(result)
-        except:
-            return str(result)
+                entity_name = f" ({entities['project'].get('displayTeamName', '')})"
+            return f"총 {parsed['count']}개{entity_name}"
+
+        if parsed['type'] == 'list':
+            data = parsed['data']
+            if len(data) == 0:
+                return "결과 없음"
+
+            display_count = min(5, len(data))
+            lines = [f"\n총 {len(data)}개 (처음 {display_count}개 표시):"]
+            lines.append("-" * 60)
+
+            for i, row in enumerate(data[:display_count], 1):
+                lines.append(f"{i}. {row}")
+
+            if len(data) > 5:
+                lines.append(f"... (나머지 {len(data)-5}개)")
+
+            return "\n".join(lines)
+
+        return str(result)
+
+    def _format_answer(self, result, sql, entities=None):
+        """간단한 답변 (요약)"""
+        parsed = self._parse_result(result, sql)
+
+        prefix = ""
+        if entities and 'project' in entities:
+            name = entities['project'].get('displayTeamName') or entities['project'].get('projectName')
+            prefix = f"'{name}': "
+
+        if parsed['type'] == 'empty':
+            return "결과 없음"
+
+        if parsed['type'] == 'group_count':
+            data = parsed['data']
+            parts = []
+            for row in data:
+                if isinstance(row, tuple) and len(row) >= 3:
+                    parts.append(f"{row[-1]}개 {row[0]} {row[1]}")
+
+            return f"{prefix}{parsed['total']}개 미션 ({', '.join(parts)})"
+
+        if parsed['type'] == 'count':
+            return f"{prefix}{parsed['count']}개"
+
+        if parsed['type'] == 'list':
+            return f"{prefix}{len(parsed['data'])}개의 결과"
+
+        return str(result)
 
 if __name__ == "__main__":
     bot = ModularSQLBot()

@@ -33,10 +33,17 @@ class RAGService:
         self.vector_stores = {}
         self.table_cache = {}
     
-    def build_index(self, project_name, db_uri):
-        """Build RAG index from DB schema"""
+    def build_index(self, project_name, db=None, db_uri=None):
+        """Build RAG index from DB schema
+
+        Args:
+            project_name: 프로젝트 이름
+            db: SQLDatabase 객체 (우선 사용)
+            db_uri: DB URI (db가 없으면 이걸로 연결)
+        """
         try:
-            db = SQLDatabase.from_uri(db_uri, sample_rows_in_table_info=0)
+            if db is None:
+                db = SQLDatabase.from_uri(db_uri, sample_rows_in_table_info=0)
             inspector = inspect(db._engine)
             all_tables = db.get_usable_table_names()
             
