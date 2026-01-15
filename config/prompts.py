@@ -10,18 +10,19 @@ Generate a {db_type} SQL query to answer: {question}
 1. ONLY use the tables shown above in "Database Schema"
 2. NEVER join tables that are not both present in the schema
 3. NEVER invent column names - only use columns from CREATE TABLE statements
+4. If NO specific project is mentioned → query ALL data (no WHERE projectId clause)
+5. ONLY use WHERE projectId = '...' if a specific project name is in the question
 
-### How to count users
-- If ONLY fury_users table is available:
-  Query: SELECT COUNT(*) FROM fury_users
-  
-- If fury_user_project_missions table is available with projectId 'X':
-  Query: SELECT COUNT(DISTINCT address) FROM fury_user_project_missions WHERE projectId = 'X'
+### Examples
 
-### Other common queries
-- Count missions: SELECT COUNT(*) FROM fury_project_missions WHERE projectId = 'X'
-- Mission types: SELECT missionCategory1, missionCategory2, COUNT(*) FROM fury_project_missions WHERE projectId = 'X' GROUP BY missionCategory1, missionCategory2
-- Campaign end date: SELECT endDate FROM fury_project_weeks WHERE projectId = 'X' ORDER BY endDate DESC LIMIT 1
+When project is specified (e.g. "SuperWalk missions"):
+  SELECT COUNT(*) FROM fury_project_missions WHERE projectId = 'superwalk'
+
+When NO project is specified (e.g. "Which user did the most missions?"):
+  SELECT address, COUNT(*) AS total FROM fury_user_project_missions GROUP BY address ORDER BY total DESC LIMIT 1
+
+When counting all users:
+  SELECT COUNT(*) FROM fury_users
 
 ### Your {db_type} query:"""
 
