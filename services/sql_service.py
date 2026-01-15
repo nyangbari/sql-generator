@@ -248,11 +248,20 @@ Return ONLY the table names needed, one per line:"""}
         try:
             # Phi-3 chat format
             messages = [
-                {"role": "user", "content": f"""Question: {question}
-SQL Result: {sql_result}
+                {"role": "user", "content": f"""You are answering a database query result.
 
-Based on the SQL result above, provide a natural, conversational answer in Korean.
-Keep it brief (1-2 sentences). Just answer the question directly."""}
+User Question: {question}
+
+Query Result (list of tuples):
+{sql_result}
+
+Instructions:
+- The result contains wallet addresses (0x...) and counts
+- Summarize the result in natural Korean
+- If multiple items, mention the top ones
+- Keep it brief (2-3 sentences max)
+
+Answer in Korean:"""}
             ]
 
             # Phi-3 chat template 적용
