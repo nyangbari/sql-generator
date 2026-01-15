@@ -132,14 +132,16 @@ Return ONLY the table names needed, one per line:"""}
 
             print(f"   📝 Qwen2 raw output: {answer[:200]}")  # 디버그
 
-            # 테이블 이름 파싱 (정확한 매칭만)
+            # 테이블 이름 파싱 (줄바꿈, 쉼표 모두 처리)
             candidate_names = {c['name'].lower(): c for c in candidates}
             selected = []
 
-            for line in answer.split('\n'):
-                line = line.strip().lower()
-                if line in candidate_names and candidate_names[line] not in selected:
-                    selected.append(candidate_names[line])
+            # 줄바꿈과 쉼표로 분리
+            parts = answer.replace(',', '\n').split('\n')
+            for part in parts:
+                name = part.strip().lower()
+                if name in candidate_names and candidate_names[name] not in selected:
+                    selected.append(candidate_names[name])
 
             print(f"   🤖 Qwen2 선택: {[t['name'] for t in selected]}")
 
