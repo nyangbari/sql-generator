@@ -182,6 +182,7 @@ Keep it brief (1-2 sentences). Just answer the question directly."""}
                     temperature=ANSWER_MODEL_CONFIG['temperature'],
                     do_sample=True,
                     pad_token_id=self.answer_tokenizer.eos_token_id,
+                    use_cache=False,  # 호환성 문제 해결
                 )
 
             response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
