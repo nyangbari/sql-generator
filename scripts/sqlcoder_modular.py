@@ -106,8 +106,8 @@ class ModularSQLBot:
 
             print(f"   후보 테이블: {[c['name'] for c in candidates]}")
 
-            # 1-2: Phi-3로 최종 선택
-            print("\n🔍 Step 1-2: 최종 선택 (Phi-3)...")
+            # 1-2: Qwen2로 최종 선택
+            print("\n🔍 Step 1-2: 최종 선택 (Qwen2)...")
             tables = self.sql.select_tables(question, candidates)
 
             if not tables:

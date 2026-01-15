@@ -31,8 +31,8 @@ class SQLService:
 
         print("✅ SQLCoder 로드 완료!")
 
-        # Phi-3 로드 (자연어 답변 생성용)
-        print("🔄 Phi-3 로딩...")
+        # Qwen2 로드 (자연어 답변 생성용)
+        print("🔄 Qwen2 로딩...")
 
         self.answer_tokenizer = AutoTokenizer.from_pretrained(
             ANSWER_MODEL_CONFIG['model_id'],
@@ -47,10 +47,10 @@ class SQLService:
             trust_remote_code=True
         )
 
-        print("✅ Phi-3 로드 완료!")
+        print("✅ Qwen2 로드 완료!")
 
     def select_tables(self, question, candidates):
-        """후보 테이블 중에서 필요한 테이블 선택 (Phi-3 사용)
+        """후보 테이블 중에서 필요한 테이블 선택 (Qwen2 사용)
 
         Args:
             question: 사용자 질문
@@ -59,9 +59,9 @@ class SQLService:
         Returns:
             list: 선택된 테이블 정보 리스트 [{name, schema}, ...]
         """
-        # 후보가 2개 이하면 그대로 반환 (Phi-3 불필요)
+        # 후보가 2개 이하면 그대로 반환 (Qwen2 불필요)
         if len(candidates) <= 2:
-            print(f"   ⏭️  후보 {len(candidates)}개 - Phi-3 스킵")
+            print(f"   ⏭️  후보 {len(candidates)}개 - Qwen2 스킵")
             return candidates
 
         try:
@@ -115,15 +115,22 @@ Return ONLY the table names needed, one per line:"""}
                     use_cache=False,
                 )
 
-            response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=False)
 
-            # 응답에서 테이블 이름 추출
-            if "<|assistant|>" in response:
-                answer = response.split("<|assistant|>")[-1].strip()
+            # Qwen2 응답 추출
+            if "<|im_start|>assistant" in response:
+                answer = response.split("<|im_start|>assistant")[-1]
+                if "<|im_end|>" in answer:
+                    answer = answer.split("<|im_end|>")[0]
+                answer = answer.strip()
             else:
-                answer = response[len(prompt):].strip()
+                response_clean = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+                if "one per line:" in response_clean:
+                    answer = response_clean.split("one per line:")[-1].strip()
+                else:
+                    answer = response_clean[-200:].strip()
 
-            print(f"   📝 Phi-3 raw output: {answer[:200]}")  # 디버그
+            print(f"   📝 Qwen2 raw output: {answer[:200]}")  # 디버그
 
             # 테이블 이름 파싱 (정확한 매칭만)
             candidate_names = {c['name'].lower(): c for c in candidates}
@@ -134,7 +141,7 @@ Return ONLY the table names needed, one per line:"""}
                 if line in candidate_names and candidate_names[line] not in selected:
                     selected.append(candidate_names[line])
 
-            print(f"   🤖 Phi-3 선택: {[t['name'] for t in selected]}")
+            print(f"   🤖 Qwen2 선택: {[t['name'] for t in selected]}")
 
             # 선택된 게 없으면 상위 3개 반환
             return selected if selected else candidates[:3]
@@ -244,7 +251,7 @@ Return ONLY the table names needed, one per line:"""}
         return sql
 
     def generate_answer(self, question, sql_result):
-        """SQL 결과를 자연어로 변환 (Phi-3 사용)"""
+        """SQL 결과를 자연어로 변환 (Qwen2 사용)"""
         try:
             # Qwen2 chat format
             messages = [
@@ -252,13 +259,13 @@ Return ONLY the table names needed, one per line:"""}
 
 질문: {question}
 
-결과 (지갑주소, 개수):
+결과:
 {sql_result}
 
 간단하게 한국어로 답변해주세요 (1-2문장). 핵심만 말해주세요."""}
             ]
 
-            # Phi-3 chat template 적용
+            # Qwen2 chat template 적용
             prompt = self.answer_tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
@@ -281,19 +288,36 @@ Return ONLY the table names needed, one per line:"""}
                     temperature=ANSWER_MODEL_CONFIG['temperature'],
                     do_sample=True,
                     pad_token_id=self.answer_tokenizer.eos_token_id,
-                    use_cache=False,  # 호환성 문제 해결
+                    use_cache=False,
                 )
 
-            response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            # Qwen2: skip_special_tokens=False로 마커 유지
+            response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=False)
 
-            # 답변 부분만 추출 (assistant 응답)
-            if "<|assistant|>" in response:
-                answer = response.split("<|assistant|>")[-1].strip()
+            print(f"   📝 Qwen2 raw: {response[-300:]}")  # 디버그
+
+            # Qwen2 응답 추출 (마커: <|im_start|>assistant ... <|im_end|>)
+            if "<|im_start|>assistant" in response:
+                # assistant 응답 부분만 추출
+                answer = response.split("<|im_start|>assistant")[-1]
+                # 끝 마커 제거
+                if "<|im_end|>" in answer:
+                    answer = answer.split("<|im_end|>")[0]
+                answer = answer.strip()
             else:
-                answer = response[len(prompt):].strip()
+                # 특수 토큰 없이 디코딩 후 프롬프트 제거
+                response_clean = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+                # 프롬프트에서 user 메시지 부분 찾아서 그 이후만 추출
+                if "핵심만 말해주세요." in response_clean:
+                    answer = response_clean.split("핵심만 말해주세요.")[-1].strip()
+                else:
+                    answer = response_clean[-200:].strip()
 
             # 첫 문장만 (깔끔하게)
             answer = answer.split('\n')[0].strip()
+
+            # 불필요한 마커 정리
+            answer = answer.replace("<|im_end|>", "").replace("<|im_start|>", "").strip()
 
             return answer
 
