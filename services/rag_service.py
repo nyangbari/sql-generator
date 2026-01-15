@@ -136,7 +136,7 @@ Schema:
         return self.get_candidates(project_name, question, k)
 
     def get_candidates(self, project_name, question, k=5):
-        """순수 유사도 기반 후보 테이블 검색 (Hybrid용)
+        """유사도 + 컬럼명 매칭 기반 후보 테이블 검색
 
         Args:
             project_name: DB 이름
@@ -150,12 +150,16 @@ Schema:
             return []
 
         try:
+            # 1. 임베딩 유사도 검색
             vector_store = self.vector_stores[project_name]
             docs = vector_store.similarity_search(question, k=k)
 
             candidates = []
+            seen_tables = set()
+
             for doc in docs:
                 table_name = doc.metadata["table"]
+                seen_tables.add(table_name)
                 candidates.append({
                     "name": table_name,
                     "schema": doc.metadata["create_statement"],
@@ -163,11 +167,59 @@ Schema:
                     "columns": doc.metadata.get("columns", [])
                 })
 
+            # 2. 컬럼명 직접 매칭 (동적 검색)
+            column_matched = self._find_tables_by_column(project_name, question)
+
+            for table_name in column_matched:
+                if table_name not in seen_tables:
+                    info = self.table_cache[project_name][table_name]
+                    candidates.append({
+                        "name": table_name,
+                        "schema": info["create_statement"],
+                        "description": info.get("description", ""),
+                        "columns": info.get("columns", [])
+                    })
+                    seen_tables.add(table_name)
+                    print(f"   🔗 컬럼 매칭으로 추가: {table_name}")
+
             return candidates
 
         except Exception as e:
             print(f"   ⚠️  RAG 검색 실패: {e}")
             return []
+
+    def _find_tables_by_column(self, project_name, question):
+        """질문의 키워드로 컬럼명 동적 검색"""
+        if project_name not in self.table_cache:
+            return []
+
+        # 불용어 제거
+        stopwords = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
+                     'show', 'me', 'get', 'find', 'list', 'give', 'what', 'which',
+                     'how', 'many', 'much', 'with', 'their', 'from', 'for', 'and',
+                     'or', 'in', 'on', 'at', 'to', 'of', 'by', 'top', 'all'}
+
+        # 질문에서 키워드 추출
+        words = []
+        for word in question.lower().replace("'", " ").replace('"', ' ').split():
+            # 숫자 제거, 2글자 이상만
+            clean = ''.join(c for c in word if c.isalpha())
+            if len(clean) >= 3 and clean not in stopwords:
+                words.append(clean)
+
+        matched_tables = []
+
+        for table, info in self.table_cache[project_name].items():
+            for column in info['columns']:
+                col_lower = column.lower()
+                for word in words:
+                    # 키워드가 컬럼명에 포함되어 있으면 매칭
+                    if word in col_lower:
+                        if table not in matched_tables:
+                            matched_tables.append(table)
+                        break
+
+        return matched_tables
     
     def _build_create_statement(self, table, columns, pk_cols, table_comment=""):
         """Build CREATE TABLE statement with comments"""
