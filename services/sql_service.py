@@ -60,27 +60,29 @@ class SQLService:
             list: 선택된 테이블 이름 리스트
         """
         try:
-            # 테이블 목록 생성
+            # 테이블 목록 생성 (명확한 설명 포함)
             table_list = []
             for name, info in available_tables.items():
-                desc = info.get('description', '')[:100]  # 설명 100자로 제한
-                cols = ', '.join(info.get('columns', [])[:10])  # 컬럼 10개로 제한
-                table_list.append(f"- {name}: {desc}\n  Columns: {cols}")
+                desc = info.get('description', '')[:150]
+                cols = ', '.join(info.get('columns', [])[:8])
+                table_list.append(f"- {name}\n  Purpose: {desc}\n  Columns: {cols}")
 
-            tables_text = "\n".join(table_list)
+            tables_text = "\n\n".join(table_list)
 
             messages = [
-                {"role": "user", "content": f"""You are a database expert. Given a question, select the relevant tables needed to answer it.
+                {"role": "user", "content": f"""You are a database expert. Select tables needed to answer the question.
 
 Available tables:
 {tables_text}
 
 Question: {question}
 
-Return ONLY the table names needed, one per line. No explanation.
-Example response:
-fury_users
-fury_project_missions"""}
+Think step by step:
+1. What data does the question ask for?
+2. Which tables have the relevant columns?
+3. Check column comments for status/type meanings.
+
+Return ONLY the table names needed, one per line:"""}
             ]
 
             prompt = self.answer_tokenizer.apply_chat_template(
