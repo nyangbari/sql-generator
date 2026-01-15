@@ -1,7 +1,7 @@
 """SQL Generation Service - With JOIN validation"""
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from config.prompts import SQL_GENERATION_PROMPT_TEMPLATE
+from config.prompts import SQL_GENERATION_PROMPT_TEMPLATE, ANSWER_PROMPT
 from config.settings import MODEL_CONFIG
 import re
 
@@ -112,19 +112,66 @@ class SQLService:
     def _mysql_fix(self, sql):
         """PostgreSQL → MySQL auto-fix"""
         original = sql
-        
+
         sql = re.sub(r'\s+NULLS\s+(FIRST|LAST)', '', sql, flags=re.IGNORECASE)
-        
+
         offset_match = re.search(r'LIMIT\s+(\d+)\s+OFFSET\s+(\d+)', sql, re.IGNORECASE)
         if offset_match:
             limit = offset_match.group(1)
             offset = offset_match.group(2)
             sql = re.sub(r'LIMIT\s+\d+\s+OFFSET\s+\d+', f'LIMIT {offset}, {limit}', sql, flags=re.IGNORECASE)
-        
+
         sql = re.sub(r'::\w+', '', sql)
         sql = re.sub(r'\bILIKE\b', 'LIKE', sql, flags=re.IGNORECASE)
-        
+
         if sql != original:
             print(f"   🔧 Auto-fixed for MySQL")
-        
+
         return sql
+
+    def generate_answer(self, question, sql_result):
+        """SQL 결과를 자연어로 변환"""
+        try:
+            prompt = ANSWER_PROMPT.format(
+                question=question,
+                result=sql_result
+            )
+
+            inputs = self.tokenizer.encode(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=2048,
+                add_special_tokens=True
+            )
+
+            inputs = inputs.to(self.model.device)
+
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    inputs,
+                    max_new_tokens=150,
+                    temperature=0.7,
+                    top_p=0.9,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id,
+                    repetition_penalty=1.1
+                )
+
+            result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            # 프롬프트 제거하고 답변만 추출
+            if result.startswith(prompt):
+                answer = result[len(prompt):].strip()
+            else:
+                answer = result
+
+            # 첫 문장만 추출 (깔끔하게)
+            answer = answer.split('\n')[0].strip()
+
+            return answer
+
+        except Exception as e:
+            print(f"   ⚠️  자연어 생성 실패: {e}")
+            return None

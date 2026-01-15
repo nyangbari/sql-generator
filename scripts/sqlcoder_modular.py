@@ -142,12 +142,19 @@ class ModularSQLBot:
             result = db.run(sql)
             
             print(f"\n📊 결과:")
-            
+
             formatted = self._format_result(result, sql, preprocessed.get('entities'))
             print(formatted)
-            
+
+            # Step 5: 자연어 답변 생성 (SQLCoder 재사용)
+            print("\n🔄 Step 4: 자연어 답변 생성...")
+            natural_answer = self.sql.generate_answer(question, result)
+
             print("\n" + "="*70)
-            print(f"💡 {self._format_answer(result, sql, preprocessed.get('entities'))}")
+            if natural_answer:
+                print(f"💬 {natural_answer}")
+            else:
+                print(f"💡 {self._format_answer(result, sql, preprocessed.get('entities'))}")
             print("="*70)
             
             return {
