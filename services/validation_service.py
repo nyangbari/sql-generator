@@ -33,14 +33,14 @@ class ValidationService:
 
         # 3. Check table usage (if allowed_tables provided)
         if allowed_tables:
-            is_valid, error = self._validate_tables(sql, allowed_tables)
+            is_valid, error = self.validate_tables(sql, allowed_tables)
             if not is_valid:
                 return False, error
 
         return True, None
 
-    def _validate_tables(self, sql, allowed_tables):
-        """SQL이 허용된 테이블만 사용하는지 검증"""
+    def validate_tables(self, sql, allowed_tables):
+        """SQL이 허용된 테이블만 사용하는지 검증 (public 메서드)"""
         # Extract table names from SQL (after FROM and JOIN)
         pattern = r'(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)'
         used_tables = re.findall(pattern, sql, re.IGNORECASE)
@@ -49,6 +49,6 @@ class ValidationService:
 
         for table in used_tables:
             if table.upper() not in allowed_upper:
-                return False, f"❌ Table '{table}' not in schema"
+                return False, f"Table '{table}' not in schema"
 
         return True, None

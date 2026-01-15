@@ -117,18 +117,24 @@ class ModularSQLBot:
             print(f"\n💾 생성된 SQL:")
             print(sql)
 
-            # Step 3: Validation (보안 + 테이블 검증)
-            table_names = [t['name'] for t in tables]
-            valid, error = self.validator.validate(sql, allowed_tables=table_names)
+            # Step 3: Validation (보안 검증만 - 테이블 검증은 경고만)
+            valid, error = self.validator.validate(sql)  # 보안 검증
 
             if not valid:
                 print(f"\n{error}")
+                return None
+
+            # 테이블 검증 (경고만, 차단하지 않음)
+            table_names = [t['name'] for t in tables]
+            table_valid, table_error = self.validator.validate_tables(sql, table_names)
+
+            if not table_valid:
+                print(f"\n   ⚠️  {table_error}")
+                print(f"   📋 Available tables: {table_names}")
                 # Fallback for user count
                 if 'fury_users' in table_names and len(table_names) == 1:
                     sql = "SELECT COUNT(*) FROM fury_users"
                     print(f"   🔧 Using fallback: {sql}")
-                else:
-                    return None
             
             # Step 4: Execution
             print("\n🔄 Step 3: 실행...")
