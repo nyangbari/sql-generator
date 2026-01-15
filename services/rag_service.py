@@ -177,10 +177,18 @@ Schema:
                         "name": table_name,
                         "schema": info["create_statement"],
                         "description": info.get("description", ""),
-                        "columns": info.get("columns", [])
+                        "columns": info.get("columns", []),
+                        "column_matched": True  # 컬럼 매칭 플래그
                     })
                     seen_tables.add(table_name)
                     print(f"   🔗 컬럼 매칭으로 추가: {table_name}")
+                else:
+                    # 이미 있는 테이블도 플래그 추가
+                    for c in candidates:
+                        if c["name"] == table_name:
+                            c["column_matched"] = True
+                            print(f"   🔗 컬럼 매칭 확인: {table_name}")
+                            break
 
             return candidates
 

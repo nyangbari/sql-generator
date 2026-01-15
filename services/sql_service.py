@@ -59,6 +59,11 @@ class SQLService:
         Returns:
             list: 선택된 테이블 정보 리스트 [{name, schema}, ...]
         """
+        # 1. 컬럼 매칭된 테이블은 무조건 포함
+        must_include = [c for c in candidates if c.get('column_matched')]
+        if must_include:
+            print(f"   ✅ 컬럼 매칭 테이블 (무조건 포함): {[t['name'] for t in must_include]}")
+
         # 후보가 2개 이하면 그대로 반환 (Qwen2 불필요)
         if len(candidates) <= 2:
             print(f"   ⏭️  후보 {len(candidates)}개 - Qwen2 스킵")
@@ -145,14 +150,26 @@ Return ONLY the table names needed, one per line:"""}
 
             print(f"   🤖 Qwen2 선택: {[t['name'] for t in selected]}")
 
-            # 선택된 게 없으면 상위 3개 반환
-            return selected if selected else candidates[:3]
+            # 컬럼 매칭 테이블 + Qwen2 선택 합치기 (중복 제거)
+            final = list(must_include)
+            seen = {t['name'] for t in final}
+            for t in selected:
+                if t['name'] not in seen:
+                    final.append(t)
+                    seen.add(t['name'])
+
+            # 아무것도 없으면 상위 3개 반환
+            if not final:
+                return candidates[:3]
+
+            print(f"   📋 최종 선택: {[t['name'] for t in final]}")
+            return final
 
         except Exception as e:
             print(f"   ⚠️  테이블 선택 실패: {e}")
             import traceback
             traceback.print_exc()
-            return candidates[:3]
+            return must_include if must_include else candidates[:3]
 
     def generate(self, question, tables, hints=None, db_type="MySQL"):
         """SQL 생성"""
