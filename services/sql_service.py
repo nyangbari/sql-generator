@@ -246,16 +246,16 @@ Return ONLY the table names needed, one per line:"""}
     def generate_answer(self, question, sql_result):
         """SQL 결과를 자연어로 변환 (Phi-3 사용)"""
         try:
-            # Phi-3 chat format
+            # Qwen2 chat format
             messages = [
-                {"role": "user", "content": f"""Summarize this database query result.
+                {"role": "user", "content": f"""다음 데이터베이스 쿼리 결과를 요약해주세요.
 
-Question: {question}
+질문: {question}
 
-Result (wallet_address, count):
+결과 (지갑주소, 개수):
 {sql_result}
 
-Give a brief answer in English (1-2 sentences). Just state the facts."""}
+간단하게 한국어로 답변해주세요 (1-2문장). 핵심만 말해주세요."""}
             ]
 
             # Phi-3 chat template 적용

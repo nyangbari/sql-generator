@@ -29,11 +29,11 @@ MODEL_CONFIG = {
     'top_p': 0.95,
 }
 
-# 자연어 생성용 모델
+# 자연어 생성용 모델 (한국어 지원)
 ANSWER_MODEL_CONFIG = {
-    'model_id': 'microsoft/Phi-3-mini-4k-instruct',
+    'model_id': 'Qwen/Qwen2-1.5B-Instruct',
     'device_map': 'auto',
-    'load_in_8bit': True,
+    'load_in_8bit': False,  # 1.5B는 작아서 8bit 불필요
     'max_new_tokens': 150,
     'temperature': 0.7,
 }
