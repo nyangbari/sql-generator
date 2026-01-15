@@ -2,34 +2,52 @@
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config.prompts import SQL_GENERATION_PROMPT_TEMPLATE, ANSWER_PROMPT
-from config.settings import MODEL_CONFIG
+from config.settings import MODEL_CONFIG, ANSWER_MODEL_CONFIG
 import re
 
 class SQLService:
     """SQL 생성 서비스"""
     
     def __init__(self):
+        # SQLCoder 로드 (SQL 생성용)
         print("🔄 SQLCoder 로딩...")
-        
+
         self.tokenizer = AutoTokenizer.from_pretrained(
             MODEL_CONFIG['model_id'],
             trust_remote_code=True
         )
-        
+
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
-        
-        model = AutoModelForCausalLM.from_pretrained(
+
+        self.model = AutoModelForCausalLM.from_pretrained(
             MODEL_CONFIG['model_id'],
             torch_dtype=torch.float16,
             device_map=MODEL_CONFIG['device_map'],
             load_in_8bit=MODEL_CONFIG['load_in_8bit'],
             trust_remote_code=True
         )
-        
-        self.model = model
+
         print("✅ SQLCoder 로드 완료!")
+
+        # Phi-3 로드 (자연어 답변 생성용)
+        print("🔄 Phi-3 로딩...")
+
+        self.answer_tokenizer = AutoTokenizer.from_pretrained(
+            ANSWER_MODEL_CONFIG['model_id'],
+            trust_remote_code=True
+        )
+
+        self.answer_model = AutoModelForCausalLM.from_pretrained(
+            ANSWER_MODEL_CONFIG['model_id'],
+            torch_dtype=torch.float16,
+            device_map=ANSWER_MODEL_CONFIG['device_map'],
+            load_in_8bit=ANSWER_MODEL_CONFIG['load_in_8bit'],
+            trust_remote_code=True
+        )
+
+        print("✅ Phi-3 로드 완료!")
     
     def generate(self, question, tables, hints=None, db_type="MySQL"):
         """SQL 생성"""
@@ -130,48 +148,57 @@ class SQLService:
         return sql
 
     def generate_answer(self, question, sql_result):
-        """SQL 결과를 자연어로 변환"""
+        """SQL 결과를 자연어로 변환 (Phi-3 사용)"""
         try:
-            prompt = ANSWER_PROMPT.format(
-                question=question,
-                result=sql_result
+            # Phi-3 chat format
+            messages = [
+                {"role": "user", "content": f"""Question: {question}
+SQL Result: {sql_result}
+
+Based on the SQL result above, provide a natural, conversational answer in Korean.
+Keep it brief (1-2 sentences). Just answer the question directly."""}
+            ]
+
+            # Phi-3 chat template 적용
+            prompt = self.answer_tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
             )
 
-            inputs = self.tokenizer.encode(
+            inputs = self.answer_tokenizer(
                 prompt,
                 return_tensors="pt",
                 truncation=True,
-                max_length=2048,
-                add_special_tokens=True
+                max_length=2048
             )
 
-            inputs = inputs.to(self.model.device)
+            inputs = inputs.to(self.answer_model.device)
 
             with torch.no_grad():
-                outputs = self.model.generate(
-                    inputs,
-                    max_new_tokens=150,
-                    temperature=0.7,
-                    top_p=0.9,
+                outputs = self.answer_model.generate(
+                    **inputs,
+                    max_new_tokens=ANSWER_MODEL_CONFIG['max_new_tokens'],
+                    temperature=ANSWER_MODEL_CONFIG['temperature'],
                     do_sample=True,
-                    pad_token_id=self.tokenizer.pad_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id,
-                    repetition_penalty=1.1
+                    pad_token_id=self.answer_tokenizer.eos_token_id,
                 )
 
-            result = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-            # 프롬프트 제거하고 답변만 추출
-            if result.startswith(prompt):
-                answer = result[len(prompt):].strip()
+            # 답변 부분만 추출 (assistant 응답)
+            if "<|assistant|>" in response:
+                answer = response.split("<|assistant|>")[-1].strip()
             else:
-                answer = result
+                answer = response[len(prompt):].strip()
 
-            # 첫 문장만 추출 (깔끔하게)
+            # 첫 문장만 (깔끔하게)
             answer = answer.split('\n')[0].strip()
 
             return answer
 
         except Exception as e:
             print(f"   ⚠️  자연어 생성 실패: {e}")
+            import traceback
+            traceback.print_exc()
             return None

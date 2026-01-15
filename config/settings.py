@@ -18,15 +18,24 @@ DATABASE_CONFIG = {
     }
 }
 
-# Model settings
+# Model settings - SQL 생성용
 MODEL_CONFIG = {
     'model_id': 'defog/sqlcoder-7b-2',
     'device_map': 'auto',
     'load_in_8bit': True,
     'max_new_tokens': 500,
-    'min_new_tokens': 50,  # ← FORCE at least 50 tokens!
-    'temperature': 0.5,     # ← Higher temperature
-    'top_p': 0.95,         # ← Add nucleus sampling
+    'min_new_tokens': 50,
+    'temperature': 0.5,
+    'top_p': 0.95,
+}
+
+# 자연어 생성용 모델
+ANSWER_MODEL_CONFIG = {
+    'model_id': 'microsoft/Phi-3-mini-4k-instruct',
+    'device_map': 'auto',
+    'load_in_8bit': True,
+    'max_new_tokens': 150,
+    'temperature': 0.7,
 }
 
 # RAG settings
