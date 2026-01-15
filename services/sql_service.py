@@ -48,7 +48,94 @@ class SQLService:
         )
 
         print("✅ Phi-3 로드 완료!")
-    
+
+    def select_tables(self, question, available_tables):
+        """질문에 필요한 테이블 선택 (Phi-3 사용)
+
+        Args:
+            question: 사용자 질문
+            available_tables: {table_name: schema_info} 딕셔너리
+
+        Returns:
+            list: 선택된 테이블 이름 리스트
+        """
+        try:
+            # 테이블 목록 생성
+            table_list = []
+            for name, info in available_tables.items():
+                desc = info.get('description', '')[:100]  # 설명 100자로 제한
+                cols = ', '.join(info.get('columns', [])[:10])  # 컬럼 10개로 제한
+                table_list.append(f"- {name}: {desc}\n  Columns: {cols}")
+
+            tables_text = "\n".join(table_list)
+
+            messages = [
+                {"role": "user", "content": f"""You are a database expert. Given a question, select the relevant tables needed to answer it.
+
+Available tables:
+{tables_text}
+
+Question: {question}
+
+Return ONLY the table names needed, one per line. No explanation.
+Example response:
+fury_users
+fury_project_missions"""}
+            ]
+
+            prompt = self.answer_tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+
+            inputs = self.answer_tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=4096
+            )
+
+            inputs = inputs.to(self.answer_model.device)
+
+            with torch.no_grad():
+                outputs = self.answer_model.generate(
+                    **inputs,
+                    max_new_tokens=100,
+                    temperature=0.1,  # 낮은 temperature로 일관성 확보
+                    do_sample=True,
+                    pad_token_id=self.answer_tokenizer.eos_token_id,
+                    use_cache=False,
+                )
+
+            response = self.answer_tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            # 응답에서 테이블 이름 추출
+            if "<|assistant|>" in response:
+                answer = response.split("<|assistant|>")[-1].strip()
+            else:
+                answer = response[len(prompt):].strip()
+
+            # 테이블 이름 파싱
+            selected = []
+            for line in answer.split('\n'):
+                table_name = line.strip().lower()
+                # available_tables에 있는지 확인
+                for avail_name in available_tables.keys():
+                    if avail_name.lower() == table_name or table_name in avail_name.lower():
+                        if avail_name not in selected:
+                            selected.append(avail_name)
+                        break
+
+            print(f"   🤖 Phi-3 선택: {selected}")
+            return selected if selected else list(available_tables.keys())[:3]
+
+        except Exception as e:
+            print(f"   ⚠️  테이블 선택 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return list(available_tables.keys())[:3]
+
     def generate(self, question, tables, hints=None, db_type="MySQL"):
         """SQL 생성"""
         try:

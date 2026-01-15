@@ -95,15 +95,30 @@ class ModularSQLBot:
             else:
                 print(f"   전체 DB 조회 (프로젝트 필터 없음)")
             
-            # Step 1: RAG search
-            print("\n🔍 Step 1: RAG 검색...")
-            tables = self.rag.search(db_name, question)
-            
-            if not tables:
+            # Step 1: 테이블 선택 (Phi-3)
+            print("\n🔍 Step 1: 테이블 선택 (Phi-3)...")
+            available_tables = self.rag.table_cache.get(db_name, {})
+
+            if not available_tables:
+                print("❌ 테이블 정보 없음")
+                return None
+
+            selected_table_names = self.sql.select_tables(question, available_tables)
+
+            if not selected_table_names:
                 print("❌ 관련 테이블 없음")
                 return None
-            
-            print(f"   찾은 테이블: {[t['name'] for t in tables]}")
+
+            # 선택된 테이블의 스키마 가져오기
+            tables = []
+            for name in selected_table_names:
+                if name in available_tables:
+                    tables.append({
+                        "name": name,
+                        "schema": available_tables[name]["create_statement"]
+                    })
+
+            print(f"   선택된 테이블: {[t['name'] for t in tables]}")
             
             # Step 2: SQL generation
             print(f"\n🔄 Step 2: SQL 생성 ({db_type})...")
