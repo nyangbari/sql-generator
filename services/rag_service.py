@@ -108,16 +108,16 @@ Schema:
             traceback.print_exc()
     
     def search(self, project_name, question, k=None):
-        """Search for relevant tables"""
+        """Search for relevant tables (legacy - with priority)"""
         if k is None:
             k = RAG_CONFIG['k_results']
-        
+
         if project_name not in self.vector_stores:
             return []
-        
+
         # Check priority tables first
         priority_tables = self._check_priority_tables(question)
-        
+
         # If priority tables found, use ONLY those
         if priority_tables:
             tables = []
@@ -128,24 +128,43 @@ Schema:
                         "name": table_name,
                         "schema": info["create_statement"]
                     })
-            
+
             if tables:
                 return tables[:k]
-        
+
         # Fallback: RAG search
+        return self.get_candidates(project_name, question, k)
+
+    def get_candidates(self, project_name, question, k=5):
+        """순수 유사도 기반 후보 테이블 검색 (Hybrid용)
+
+        Args:
+            project_name: DB 이름
+            question: 질문
+            k: 반환할 후보 수 (기본 5개)
+
+        Returns:
+            list: 후보 테이블 정보 리스트
+        """
+        if project_name not in self.vector_stores:
+            return []
+
         try:
             vector_store = self.vector_stores[project_name]
             docs = vector_store.similarity_search(question, k=k)
-            
-            tables = []
+
+            candidates = []
             for doc in docs:
-                tables.append({
-                    "name": doc.metadata["table"],
-                    "schema": doc.metadata["create_statement"]
+                table_name = doc.metadata["table"]
+                candidates.append({
+                    "name": table_name,
+                    "schema": doc.metadata["create_statement"],
+                    "description": doc.metadata.get("description", ""),
+                    "columns": doc.metadata.get("columns", [])
                 })
-            
-            return tables
-            
+
+            return candidates
+
         except Exception as e:
             print(f"   ⚠️  RAG 검색 실패: {e}")
             return []

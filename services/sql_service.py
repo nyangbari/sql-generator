@@ -49,23 +49,28 @@ class SQLService:
 
         print("✅ Phi-3 로드 완료!")
 
-    def select_tables(self, question, available_tables):
-        """질문에 필요한 테이블 선택 (Phi-3 사용)
+    def select_tables(self, question, candidates):
+        """후보 테이블 중에서 필요한 테이블 선택 (Phi-3 사용)
 
         Args:
             question: 사용자 질문
-            available_tables: {table_name: schema_info} 딕셔너리
+            candidates: RAG가 선택한 후보 테이블 리스트 [{name, schema, description, columns}, ...]
 
         Returns:
-            list: 선택된 테이블 이름 리스트
+            list: 선택된 테이블 정보 리스트 [{name, schema}, ...]
         """
+        # 후보가 2개 이하면 그대로 반환 (Phi-3 불필요)
+        if len(candidates) <= 2:
+            print(f"   ⏭️  후보 {len(candidates)}개 - Phi-3 스킵")
+            return candidates
+
         try:
-            # 테이블 목록 생성 (명확한 설명 포함)
+            # 테이블 목록 생성
             table_list = []
-            for name, info in available_tables.items():
-                desc = info.get('description', '')[:150]
-                cols = ', '.join(info.get('columns', [])[:8])
-                table_list.append(f"- {name}\n  Purpose: {desc}\n  Columns: {cols}")
+            for c in candidates:
+                desc = c.get('description', '')[:150]
+                cols = ', '.join(c.get('columns', [])[:8])
+                table_list.append(f"- {c['name']}\n  Purpose: {desc}\n  Columns: {cols}")
 
             tables_text = "\n\n".join(table_list)
 
@@ -118,25 +123,27 @@ Return ONLY the table names needed, one per line:"""}
             else:
                 answer = response[len(prompt):].strip()
 
-            # 테이블 이름 파싱
-            selected = []
-            for line in answer.split('\n'):
-                table_name = line.strip().lower()
-                # available_tables에 있는지 확인
-                for avail_name in available_tables.keys():
-                    if avail_name.lower() == table_name or table_name in avail_name.lower():
-                        if avail_name not in selected:
-                            selected.append(avail_name)
-                        break
+            print(f"   📝 Phi-3 raw output: {answer[:200]}")  # 디버그
 
-            print(f"   🤖 Phi-3 선택: {selected}")
-            return selected if selected else list(available_tables.keys())[:3]
+            # 테이블 이름 파싱 (정확한 매칭만)
+            candidate_names = {c['name'].lower(): c for c in candidates}
+            selected = []
+
+            for line in answer.split('\n'):
+                line = line.strip().lower()
+                if line in candidate_names and candidate_names[line] not in selected:
+                    selected.append(candidate_names[line])
+
+            print(f"   🤖 Phi-3 선택: {[t['name'] for t in selected]}")
+
+            # 선택된 게 없으면 상위 3개 반환
+            return selected if selected else candidates[:3]
 
         except Exception as e:
             print(f"   ⚠️  테이블 선택 실패: {e}")
             import traceback
             traceback.print_exc()
-            return list(available_tables.keys())[:3]
+            return candidates[:3]
 
     def generate(self, question, tables, hints=None, db_type="MySQL"):
         """SQL 생성"""

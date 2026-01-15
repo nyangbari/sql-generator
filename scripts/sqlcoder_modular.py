@@ -95,28 +95,24 @@ class ModularSQLBot:
             else:
                 print(f"   전체 DB 조회 (프로젝트 필터 없음)")
             
-            # Step 1: 테이블 선택 (Phi-3)
-            print("\n🔍 Step 1: 테이블 선택 (Phi-3)...")
-            available_tables = self.rag.table_cache.get(db_name, {})
+            # Step 1: Hybrid 테이블 선택
+            # 1-1: Sentence Transformers로 후보 필터링
+            print("\n🔍 Step 1-1: 후보 필터링 (Sentence Transformers)...")
+            candidates = self.rag.get_candidates(db_name, question, k=5)
 
-            if not available_tables:
-                print("❌ 테이블 정보 없음")
-                return None
-
-            selected_table_names = self.sql.select_tables(question, available_tables)
-
-            if not selected_table_names:
+            if not candidates:
                 print("❌ 관련 테이블 없음")
                 return None
 
-            # 선택된 테이블의 스키마 가져오기
-            tables = []
-            for name in selected_table_names:
-                if name in available_tables:
-                    tables.append({
-                        "name": name,
-                        "schema": available_tables[name]["create_statement"]
-                    })
+            print(f"   후보 테이블: {[c['name'] for c in candidates]}")
+
+            # 1-2: Phi-3로 최종 선택
+            print("\n🔍 Step 1-2: 최종 선택 (Phi-3)...")
+            tables = self.sql.select_tables(question, candidates)
+
+            if not tables:
+                print("❌ 테이블 선택 실패")
+                return None
 
             print(f"   선택된 테이블: {[t['name'] for t in tables]}")
             
