@@ -55,10 +55,18 @@ class RAGService:
                     columns = inspector.get_columns(table)
                     pk = inspector.get_pk_constraint(table)
                     pk_cols = pk.get('constrained_columns', [])
-                    
+
+                    # Get table comment
+                    table_comment = ""
+                    try:
+                        comment_info = inspector.get_table_comment(table)
+                        table_comment = comment_info.get('text', '') or ''
+                    except:
+                        pass
+
                     col_names = [col['name'] for col in columns]
-                    create_stmt = self._build_create_statement(table, columns, pk_cols)
-                    description = self._get_table_description(table)
+                    create_stmt = self._build_create_statement(table, columns, pk_cols, table_comment)
+                    description = self._get_table_description(table, table_comment)
                     
                     search_text = f"""Table: {table}
 Purpose: {description}
@@ -142,14 +150,14 @@ Schema:
             print(f"   ⚠️  RAG 검색 실패: {e}")
             return []
     
-    def _build_create_statement(self, table, columns, pk_cols):
-        """Build CREATE TABLE statement"""
+    def _build_create_statement(self, table, columns, pk_cols, table_comment=""):
+        """Build CREATE TABLE statement with comments"""
         create_stmt = f"CREATE TABLE {table} (\n"
         col_defs = []
-        
+
         for col in columns:
             col_type = str(col['type'])
-            
+
             if 'INT' in col_type.upper():
                 col_type = "INT"
             elif 'VARCHAR' in col_type.upper() or 'CHAR' in col_type.upper():
@@ -160,17 +168,38 @@ Schema:
                 col_type = "DATETIME"
             elif 'DECIMAL' in col_type.upper():
                 col_type = "DECIMAL"
-            
+
             pk_marker = " PRIMARY KEY" if col['name'] in pk_cols else ""
-            col_defs.append(f"    {col['name']} {col_type}{pk_marker}")
-        
+
+            # Add column comment if exists
+            col_comment = col.get('comment', '') or ''
+            comment_marker = f" -- {col_comment}" if col_comment else ""
+
+            col_defs.append(f"    {col['name']} {col_type}{pk_marker}{comment_marker}")
+
         create_stmt += ",\n".join(col_defs) + "\n)"
+
+        # Add table comment if exists
+        if table_comment:
+            create_stmt += f"\n-- Table comment: {table_comment}"
+
         return create_stmt
     
-    def _get_table_description(self, table):
-        """Get table description"""
+    def _get_table_description(self, table, table_comment=""):
+        """Get table description (DB comment + tables.py fallback)"""
+        parts = []
+
+        # 1. DB table comment (priority)
+        if table_comment:
+            parts.append(table_comment)
+
+        # 2. tables.py description (fallback/supplement)
         if table in TABLE_DESCRIPTIONS:
-            return TABLE_DESCRIPTIONS[table]['description'].strip()
+            parts.append(TABLE_DESCRIPTIONS[table]['description'].strip())
+
+        if parts:
+            return " | ".join(parts)
+
         return f"Table for {table.replace('fury_', '').replace('_', ' ')}"
     
     def _check_priority_tables(self, question):
